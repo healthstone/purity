@@ -63,7 +63,8 @@ boost::asio::awaitable<void> Handlers::handle_auth_select(std::shared_ptr<Client
         auto user = session->server()->db()->execute_sync<AccountsRow>(stmt);
         if (user) {
             answer_id = user->id;
-            log->debug("[handle_auth_select] User '{}' found. ID: {}", user->name.value(), user->id);
+            answer_name = user->name.value();
+            log->debug("[handle_auth_select] User '{}' found. ID: {}", answer_name, answer_id);
         } else {
             log->debug("[handle_auth_select] User '{}' not found.", username);
         }
