@@ -1,8 +1,20 @@
 # Purity Server: Overview
 
-This C++ project implements a **Asynchronous server** using **Boost.Asio**, a custom binary protocol with **big-endian** packet framing, SRP (Secure Remote Password) for authentication logic, and PostgreSQL integration.
+This C++ project implements a **Asynchronous server** using **Boost.Asio**, a custom binary protocol with **MMORPG standart** packet framing, SRP (Secure Remote Password) for authentication logic, and PostgreSQL integration.
 
 ## Key Components
+
+## 📦 Packet Structure
+
+Every TCP packet uses the **MMORPG** binary framing:
+
+```
+[2 bytes Length_BE][2 bytes Opcode_LE][Payload]
+```
+
+- Length_BE — Total length of [Opcode + Payload] in Big Endian.
+- Opcode_LE — Packet opcode as Little Endian.
+- Payload — Binary data, encoded with your custom ByteBuffer.
 
 ### ✅ **Handlers** (`Handlers.cpp`)
 - Contains a **dispatch system** that routes packets by opcode.
