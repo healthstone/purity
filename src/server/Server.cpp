@@ -4,8 +4,10 @@
 
 using boost::asio::ip::tcp;
 
-Server::Server(boost::asio::any_io_executor executor, std::shared_ptr<Database> db, int port)
-        : executor_(std::move(executor)),
+Server::Server(boost::asio::thread_pool &pool, boost::asio::any_io_executor executor, std::shared_ptr<Database> db,
+               int port)
+        : pool_(pool),
+          executor_(std::move(executor)),
           db_(std::move(db)),
           acceptor_(executor_, tcp::endpoint(tcp::v4(), port)) {}
 

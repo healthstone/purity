@@ -14,9 +14,8 @@
 
 class Database {
 public:
-    Database(boost::asio::thread_pool& pool, const std::string& conninfo, size_t pool_size = 4)
-            : pool_(pool), conninfo_(conninfo)
-    {
+    Database(const std::string &conninfo, size_t pool_size = 4)
+            : conninfo_(conninfo) {
         for (size_t i = 0; i < pool_size; ++i) {
             auto conn = std::make_unique<pqxx::connection>(conninfo_);
             prepare_all(*conn);
@@ -32,7 +31,7 @@ public:
     void shutdown() {
         std::lock_guard<std::mutex> lock(mutex_);
         while (!connections_.empty()) {
-            auto& c = connections_.front();
+            auto &c = connections_.front();
             if (c && c->is_open()) {
                 c->disconnect();
                 Logger::get()->info("[Database] Connection closed.");
@@ -42,19 +41,19 @@ public:
     }
 
     /// Чётко называется как sync, чтобы никто не звал co_await
-    template <typename Struct>
-    std::optional<Struct> execute_sync(const PreparedStatement& stmt) {
+    template<typename Struct>
+    std::optional<Struct> execute_sync(const PreparedStatement &stmt) {
         auto conn = acquire_connection();
         if (!conn) throw std::runtime_error("No DB connection available");
 
         try {
             pqxx::work txn(*conn);
             auto invoc = txn.prepared(stmt.name());
-            for (const auto& param : stmt.params()) {
+            for (const auto &param: stmt.params()) {
                 if (param.has_value()) {
                     invoc(param.value());
                 } else {
-                    invoc(static_cast<const char*>(nullptr));
+                    invoc(static_cast<const char *>(nullptr));
                 }
             }
 
@@ -73,7 +72,7 @@ public:
 
             return PgRowMapper<Struct>::map(result[0]);
         }
-        catch (const pqxx::broken_connection&) {
+        catch (const pqxx::broken_connection &) {
             Logger::get()->error("[Database] Connection broken. Attempting to reconnect.");
             conn = reconnect_connection();
             if (!conn) throw std::runtime_error("Reconnection failed");
@@ -82,8 +81,6 @@ public:
             throw;
         }
     }
-
-    boost::asio::thread_pool& thread_pool() { return pool_; }
 
 private:
     std::unique_ptr<pqxx::connection> acquire_connection() {
@@ -113,7 +110,7 @@ private:
         return conn;
     }
 
-    void prepare_all(pqxx::connection& conn) {
+    void prepare_all(pqxx::connection &conn) {
         pqxx::work txn(conn);
         conn.prepare("SELECT_ACCOUNT_BY_USERNAME",
                      "SELECT id, username, salt, verifier, email, created_at FROM accounts WHERE username = $1");
@@ -122,7 +119,6 @@ private:
         txn.commit();
     }
 
-    boost::asio::thread_pool& pool_;
     std::string conninfo_;
     std::queue<std::unique_ptr<pqxx::connection>> connections_;
     std::mutex mutex_;

@@ -12,7 +12,8 @@ class ClientSession; // Forward, хотя подключение есть — м
 
 class Server : public std::enable_shared_from_this<Server> {
 public:
-    Server(boost::asio::any_io_executor executor,
+    Server(boost::asio::thread_pool &pool,
+           boost::asio::any_io_executor executor,
            std::shared_ptr<Database> db,
            int port);
 
@@ -24,8 +25,7 @@ public:
 
     void log_session_count();
 
-    // Доступ к общему thread_pool через Database
-    boost::asio::thread_pool &thread_pool() { return db_->thread_pool(); }
+    boost::asio::thread_pool &thread_pool() { return pool_; }
 
     // Доступ к БД
     std::shared_ptr<Database> db() { return db_; }
@@ -35,6 +35,7 @@ private:
     boost::asio::ip::tcp::acceptor acceptor_;
 
     std::shared_ptr<Database> db_;  // <- Главное, shared_ptr!
+    boost::asio::thread_pool &pool_;
 
     std::unordered_set<std::shared_ptr<ClientSession>> sessions_;
     std::mutex sessions_mutex_;
