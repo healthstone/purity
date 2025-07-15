@@ -1,5 +1,3 @@
-// ✅ Итоговая версия Database с пулом соединений, реконнектом и корректным закрытием
-
 #pragma once
 
 #include "PreparedStatement.hpp"
@@ -23,7 +21,7 @@ using boost::asio::awaitable;
 
 class Database {
 public:
-    Database(boost::asio::thread_pool &pool, const std::string &conninfo, size_t pool_size = 4)
+    Database(boost::asio::thread_pool& pool, const std::string& conninfo, size_t pool_size = 4)
             : pool_(pool), conninfo_(conninfo)
     {
         for (size_t i = 0; i < pool_size; ++i) {
@@ -41,7 +39,7 @@ public:
     void shutdown() {
         std::lock_guard<std::mutex> lock(mutex_);
         while (!connections_.empty()) {
-            auto &c = connections_.front();
+            auto& c = connections_.front();
             if (c && c->is_open()) {
                 c->disconnect();
                 Logger::get()->info("[Database] Connection closed.");
@@ -50,62 +48,46 @@ public:
         }
     }
 
-    boost::asio::thread_pool &thread_pool() { return pool_; }
+    boost::asio::thread_pool& thread_pool() { return pool_; }
 
-    struct AsyncAPI {
-        Database &db;
-
-        template <typename Func, typename ResultType = typename std::invoke_result_t<Func>>
-        awaitable<ResultType> async_db_call(Func &&func) {
-            std::promise<ResultType> promise;
-            auto fut = promise.get_future();
-
-            boost::asio::post(db.pool_,
-                              [func = std::forward<Func>(func), promise = std::move(promise)]() mutable {
-                                  try {
-                                      promise.set_value(func());
-                                  } catch (...) {
-                                      promise.set_exception(std::current_exception());
-                                  }
-                              });
-
-            co_return fut.get();
-        }
-
-        template <typename Struct>
-        awaitable<std::optional<Struct>> execute(PreparedStatement stmt) {
-            co_return co_await async_db_call([this, stmt = std::move(stmt)] {
-                return db.execute_sync<Struct>(stmt);
-            });
-        }
-    };
-
-    struct SyncAPI {
-        Database &db;
-
-        template <typename Struct>
-        std::optional<Struct> execute(PreparedStatement stmt) {
-            return db.execute_sync<Struct>(stmt);
-        }
-    };
-
-    AsyncAPI Async{*this};
-    SyncAPI Sync{*this};
+    template <typename Struct>
+    awaitable<std::optional<Struct>> execute(PreparedStatement stmt) {
+        co_return co_await async_db_call([this, stmt = std::move(stmt)] {
+            return execute_sync<Struct>(stmt);
+        });
+    }
 
 private:
+    template <typename Func, typename ResultType = typename std::invoke_result_t<Func>>
+    awaitable<ResultType> async_db_call(Func&& func) {
+        std::promise<ResultType> promise;
+        auto fut = promise.get_future();
+
+        boost::asio::post(pool_,
+                          [func = std::forward<Func>(func), promise = std::move(promise)]() mutable {
+                              try {
+                                  promise.set_value(func());
+                              } catch (...) {
+                                  promise.set_exception(std::current_exception());
+                              }
+                          });
+
+        co_return fut.get();
+    }
+
     template <typename Struct>
-    std::optional<Struct> execute_sync(const PreparedStatement &stmt) {
+    std::optional<Struct> execute_sync(const PreparedStatement& stmt) {
         auto conn = acquire_connection();
         if (!conn) throw std::runtime_error("No DB connection available");
 
         try {
             pqxx::work txn(*conn);
             auto invoc = txn.prepared(stmt.name());
-            for (const auto &param : stmt.params()) {
+            for (const auto& param : stmt.params()) {
                 if (param.has_value()) {
                     invoc(param.value());
                 } else {
-                    invoc(static_cast<const char *>(nullptr));
+                    invoc(static_cast<const char*>(nullptr));
                 }
             }
 
@@ -161,17 +143,16 @@ private:
         return conn;
     }
 
-    void prepare_all(pqxx::connection &conn) {
+    void prepare_all(pqxx::connection& conn) {
         pqxx::work txn(conn);
         conn.prepare("SELECT_ACCOUNT_BY_USERNAME",
                      "SELECT id, username, salt, verifier, email, created_at FROM accounts WHERE username = $1");
         conn.prepare("INSERT_ACCOUNT_BY_USERNAME",
-                    "INSERT INTO accounts (username, salt, verifier) VALUES ($1, $2, $3) RETURNING id"
-        );
+                     "INSERT INTO accounts (username, salt, verifier) VALUES ($1, $2, $3) RETURNING id");
         txn.commit();
     }
 
-    boost::asio::thread_pool &pool_;
+    boost::asio::thread_pool& pool_;
     std::string conninfo_;
     std::queue<std::unique_ptr<pqxx::connection>> connections_;
     std::mutex mutex_;

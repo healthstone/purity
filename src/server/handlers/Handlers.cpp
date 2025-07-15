@@ -58,7 +58,7 @@ boost::asio::awaitable<void> Handlers::handle_auth_select(std::shared_ptr<Client
     uint64_t answer_id = 0;
     std::string answer_name = "";
 
-    auto user = co_await session->server()->db()->Async.execute<AccountsRow>(stmt);
+    auto user = co_await session->server()->db()->execute<AccountsRow>(stmt);
     if (user) {
         log->debug("[handle_auth_select] User '{}' found. ID: {}", user->name, user->id);
         answer_id = user->id;

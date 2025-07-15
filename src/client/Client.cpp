@@ -192,9 +192,9 @@ void Client::handle_packet(Packet& p) {
             break;
         }
         case Opcode::SMSG_ACCOUNT_LOOKUP_BY_NAME: {
+            uint64_t id = p.read_uint64();
             std::string name = p.read_string();
-            bool found = p.read_bool();
-            log->info("[Client] Account lookup result: name=[{}] found=[{}]", name, found);
+            log->info("[Client] SMSG_ACCOUNT_LOOKUP_BY_NAME id=[{}] name=[{}]", id, name);
             break;
         }
         default:
