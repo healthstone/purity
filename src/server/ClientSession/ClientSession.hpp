@@ -29,6 +29,12 @@ public:
     }
     std::shared_ptr<Server> server() const { return server_; }
 
+    // Battle.net методы
+    void setArchTag(const uint32_t& val) { archtag_ = val; }
+    void setClientTag(const uint32_t& val) { clienttag_ = val; }
+    void setVersionId(const uint32_t& val) { versionid_ = val; }
+    void setServerToken(const uint32_t& val) { servertoken_ = val; }
+
 private:
     void do_read();
     void process_read_buffer();
@@ -43,4 +49,11 @@ private:
     std::deque<std::vector<uint8_t>> write_queue_;
     bool writing_ = false;
     std::atomic<bool> closed_{false};
+
+    // pvpgn data
+    uint32_t archtag_;
+    uint32_t clienttag_;
+    uint32_t versionid_;
+
+    uint32_t servertoken_;
 };
