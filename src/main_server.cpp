@@ -16,7 +16,7 @@ int main() {
         } else if (network_threads == 0) {
             network_threads = 1; // безопасное значение по умолчанию
         }
-        int port = 12345;
+        int port = 6112;
 
         // Единый thread pool на всё приложение
         boost::asio::thread_pool pool(network_threads);

@@ -8,7 +8,7 @@ int main() {
     Logger::init_thread_pool();  // Инициализировать thread pool до первого лога!
     boost::asio::io_context io;
 
-    auto client = std::make_shared<Client>(io, "127.0.0.1", 12345);
+    auto client = std::make_shared<Client>(io, "127.0.0.1", 6112);
     client->connect();
 
     // Отправка сообщений из cin на сервер в виде опкода MESSAGE
