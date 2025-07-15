@@ -1,4 +1,6 @@
 #pragma once
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 
 #include <pqxx/pqxx>
 #include <boost/asio/thread_pool.hpp>
@@ -125,3 +127,5 @@ private:
     std::queue<std::unique_ptr<pqxx::connection>> connections_;
     std::mutex mutex_;
 };
+
+#pragma GCC diagnostic pop
