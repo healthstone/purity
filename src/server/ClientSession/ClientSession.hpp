@@ -33,6 +33,7 @@ private:
     void do_read();
     void process_read_buffer();
     void do_write();
+    void do_send_packet(const Packet &packet);
 
     boost::asio::ip::tcp::socket socket_;
     std::shared_ptr<Server> server_;

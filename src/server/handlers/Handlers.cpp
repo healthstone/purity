@@ -58,13 +58,17 @@ boost::asio::awaitable<void> Handlers::handle_auth_select(std::shared_ptr<Client
     uint64_t answer_id = 0;
     std::string answer_name = "";
 
-    auto user = co_await session->server()->db()->execute<AccountsRow>(stmt);
-    if (user) {
-        log->debug("[handle_auth_select] User '{}' found. ID: {}", user->name, user->id);
-        answer_id = user->id;
-        answer_name = user->name;
-    } else {
-        log->info("[handle_auth_select] User '{}' not found.");
+    // Проверим правильно ли ты вызываешь sync метод в worker потоке
+    try {
+        auto user = session->server()->db()->execute_sync<AccountsRow>(stmt);
+        if (user) {
+            answer_id = user->id;
+            log->debug("[handle_auth_select] User '{}' found. ID: {}", user->name.value(), user->id);
+        } else {
+            log->debug("[handle_auth_select] User '{}' not found.", username);
+        }
+    } catch (const std::exception& ex) {
+        Logger::get()->error("DB Exception: {}", ex.what());
     }
 
     Packet reply(Opcode::SMSG_ACCOUNT_LOOKUP_BY_NAME);

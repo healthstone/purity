@@ -1,41 +1,30 @@
 #pragma once
 
-#include <string>
 #include <chrono>
-#include <ctime>
+#include <string>
 #include <sstream>
 #include <iomanip>
-#include <stdexcept>
+#include <optional>
 
 namespace TimeUtils {
 
-    /**
-     * Парсит PostgreSQL timestamp (например, "2024-07-14 12:34:56")
-     * в std::chrono::system_clock::time_point
-     * Предполагается, что timestamp хранится в UTC.
-     */
-    inline std::chrono::system_clock::time_point parse_pg_timestamp(const std::string &s) {
-        std::tm tm = {};
-        std::istringstream ss(s);
-
-        // Формат PostgreSQL: "YYYY-MM-DD HH:MI:SS"
-        ss >> std::get_time(&tm, "%Y-%m-%d %H:%M:%S");
+    inline std::chrono::system_clock::time_point parse_pg_timestamp(const std::string& timestamp) {
+        std::tm t = {};
+        std::istringstream ss(timestamp);
+        ss >> std::get_time(&t, "%Y-%m-%d %H:%M:%S");
         if (ss.fail()) {
-            throw std::runtime_error("Failed to parse timestamp: " + s);
+            throw std::runtime_error("Failed to parse timestamp: " + timestamp);
         }
-
-        // Преобразуем tm в time_t — UTC.
-        // NB: timegm — GNU расширение. Если нет, используй boost::date_time или cctz.
-#ifdef _WIN32
-        // Windows не имеет timegm по умолчанию — костыль:
-        _putenv_s("TZ", "UTC");
-        _tzset();
-        std::time_t tt = mktime(&tm);
-#else
-        std::time_t tt = timegm(&tm);
-#endif
-
-        return std::chrono::system_clock::from_time_t(tt);
+        return std::chrono::system_clock::from_time_t(std::mktime(&t));
     }
 
-}
+    inline std::optional<std::chrono::system_clock::time_point> parse_pg_timestamp_optional(const std::string& timestamp) {
+        if (timestamp.empty()) return std::nullopt;
+        try {
+            return parse_pg_timestamp(timestamp);
+        } catch (...) {
+            return std::nullopt;
+        }
+    }
+
+} // namespace TimeUtils

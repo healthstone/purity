@@ -96,7 +96,19 @@ void ClientSession::process_read_buffer() {
     }
 }
 
+// ✅ Безопасная версия send_packet для вызова из любых потоков и корутин
 void ClientSession::send_packet(const Packet& packet) {
+    auto self = shared_from_this();
+    boost::asio::post(
+            socket_.get_executor(),
+            [self, packet]() {
+                self->do_send_packet(packet);
+            }
+    );
+}
+
+/** структура пакета (в big-endian): [2 size][2 opcode][payload] — приватный метод **/
+void ClientSession::do_send_packet(const Packet& packet) {
     const auto& body = packet.serialize();
 
     ByteBuffer header;

@@ -3,6 +3,7 @@
 #include <pqxx/pqxx>
 #include <string>
 #include <chrono>
+#include <optional>
 
 #include "TimeUtils.hpp"
 
@@ -10,11 +11,11 @@
 
 struct AccountsRow {
     int64_t id;
-    std::string name;
-    std::string salt;
-    std::string verifier;
-    std::string email;
-    std::chrono::system_clock::time_point created_at;
+    std::optional<std::string> name;
+    std::optional<std::string> salt;
+    std::optional<std::string> verifier;
+    std::optional<std::string> email;
+    std::optional<std::chrono::system_clock::time_point> created_at;
 };
 
 struct NothingRow {};
@@ -29,11 +30,22 @@ struct PgRowMapper<AccountsRow> {
     static AccountsRow map(const pqxx::row &r) {
         AccountsRow row;
         row.id = r["id"].as<int64_t>();
-        row.name = r["username"].as<std::string>();
-        row.salt = r["salt"].as<std::string>();
-        row.verifier = r["verifier"].as<std::string>();
-        row.email = r["email"].as<std::string>();
-        row.created_at = TimeUtils::parse_pg_timestamp(r["created_at"].as<std::string>());
+
+        if (!r["username"].is_null())
+            row.name = r["username"].as<std::string>();
+
+        if (!r["salt"].is_null())
+            row.salt = r["salt"].as<std::string>();
+
+        if (!r["verifier"].is_null())
+            row.verifier = r["verifier"].as<std::string>();
+
+        if (!r["email"].is_null())
+            row.email = r["email"].as<std::string>();
+
+        if (!r["created_at"].is_null())
+            row.created_at = TimeUtils::parse_pg_timestamp_optional(r["created_at"].as<std::string>());
+
         return row;
     }
 };
@@ -51,10 +63,3 @@ struct PgRowMapper<int64_t> {
         return r[0].as<int64_t>();
     }
 };
-
-//template<>
-//struct PgRowMapper<long> {
-//    static long map(const pqxx::row &r) {
-//        return r[0].as<long>();
-//    }
-//};

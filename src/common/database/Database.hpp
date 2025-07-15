@@ -1,23 +1,14 @@
 #pragma once
 
-#include "PreparedStatement.hpp"
-#include "QueryResults.hpp"
-#include "Logger.hpp"
-
 #include <pqxx/pqxx>
-#include <boost/asio.hpp>
-#include <boost/asio/awaitable.hpp>
 #include <boost/asio/thread_pool.hpp>
-#include <boost/asio/post.hpp>
-
-#include <future>
-#include <optional>
-#include <queue>
 #include <mutex>
+#include <queue>
 #include <memory>
-#include <iostream>
-
-using boost::asio::awaitable;
+#include <optional>
+#include "QueryResults.hpp"
+#include "PreparedStatement.hpp"
+#include "Logger.hpp"
 
 class Database {
 public:
@@ -48,33 +39,7 @@ public:
         }
     }
 
-    boost::asio::thread_pool& thread_pool() { return pool_; }
-
-    template <typename Struct>
-    awaitable<std::optional<Struct>> execute(PreparedStatement stmt) {
-        co_return co_await async_db_call([this, stmt = std::move(stmt)] {
-            return execute_sync<Struct>(stmt);
-        });
-    }
-
-private:
-    template <typename Func, typename ResultType = typename std::invoke_result_t<Func>>
-    awaitable<ResultType> async_db_call(Func&& func) {
-        std::promise<ResultType> promise;
-        auto fut = promise.get_future();
-
-        boost::asio::post(pool_,
-                          [func = std::forward<Func>(func), promise = std::move(promise)]() mutable {
-                              try {
-                                  promise.set_value(func());
-                              } catch (...) {
-                                  promise.set_exception(std::current_exception());
-                              }
-                          });
-
-        co_return fut.get();
-    }
-
+    /// Чётко называется как sync, чтобы никто не звал co_await
     template <typename Struct>
     std::optional<Struct> execute_sync(const PreparedStatement& stmt) {
         auto conn = acquire_connection();
@@ -116,6 +81,9 @@ private:
         }
     }
 
+    boost::asio::thread_pool& thread_pool() { return pool_; }
+
+private:
     std::unique_ptr<pqxx::connection> acquire_connection() {
         std::lock_guard<std::mutex> lock(mutex_);
         if (connections_.empty()) return nullptr;
