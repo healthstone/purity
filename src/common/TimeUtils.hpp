@@ -27,4 +27,14 @@ namespace TimeUtils {
         }
     }
 
+    inline std::string parse_time_point_to_string(std::chrono::system_clock::time_point timePoint) {
+        std::time_t time = std::chrono::system_clock::to_time_t(timePoint);
+        char buffer[100];
+        if (std::strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S", std::localtime(&time))) {
+            return std::string(buffer);
+        } else {
+            return "";
+        }
+    }
+
 } // namespace TimeUtils

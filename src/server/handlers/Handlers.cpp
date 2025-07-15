@@ -64,7 +64,7 @@ boost::asio::awaitable<void> Handlers::handle_auth_select(std::shared_ptr<Client
         if (user) {
             answer_id = user->id;
             answer_name = user->name.value();
-            log->debug("[handle_auth_select] User '{}' found. ID: {}", answer_name, answer_id);
+            log->debug("[handle_auth_select] User '{}' found. ID: {}, created: {}", answer_name, answer_id, TimeUtils::parse_time_point_to_string(user->created_at.value()));
         } else {
             log->debug("[handle_auth_select] User '{}' not found.", username);
         }
