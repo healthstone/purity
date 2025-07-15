@@ -47,6 +47,38 @@ This C++ project implements a **Asynchronous server** using **Boost.Asio**, a cu
 - Add new prepared statements in your DB class.
 - Extend `SRP` for real client proof validation.
 
+## 📦 Configuration via Environment Variables
+
+The server automatically reads database connection settings from **environment variables**, with safe defaults if not set:
+
+```cpp
+std::string db_host = std::getenv("DB_URL") ? std::getenv("DB_URL") : "127.0.0.1";
+std::string db_port = std::getenv("DB_PORT") ? std::getenv("DB_PORT") : "5432";
+std::string db_user = std::getenv("DB_USER") ? std::getenv("DB_USER") : "postgres";
+std::string db_password = std::getenv("DB_PASSWORD") ? std::getenv("DB_PASSWORD") : "postgres";
+std::string db_name = std::getenv("DB_NAME") ? std::getenv("DB_NAME") : "postgres";
+```
+
+### ⚙️ Variables:
+- **DB_URL** — PostgreSQL host address (default `127.0.0.1`)
+- **DB_PORT** — PostgreSQL port (default `5432`)
+- **DB_USER** — database user (default `postgres`)
+- **DB_PASSWORD** — database password (default `postgres`)
+- **DB_NAME** — database name (default `postgres`)
+
+If an environment variable is not set, a safe fallback will be used. The log output shows exactly which values are applied.
+
+Example for Linux:
+```bash
+export DB_URL=192.168.1.100
+export DB_USER=myuser
+export DB_PASSWORD=mypass
+./server
+```
+
+This makes it easy to configure the server without changing the source code! ✅
+
+
 ---
 
 ## Requirements
