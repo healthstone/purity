@@ -2,11 +2,12 @@
 #include "Logger.hpp"
 #include <iostream>
 #include <utility>
+#include <endian.h>  // htole16, htons
 
 using boost::asio::ip::tcp;
 using namespace std::chrono_literals;
 
-Client::Client(boost::asio::io_context& io_context, std::string h, int p)
+Client::Client(boost::asio::io_context &io_context, std::string h, int p)
         : io(io_context), socket(io_context), host(std::move(h)), port(p), connected(false),
           reconnect_timer(io_context), heartbeat_timer(io_context) {}
 
@@ -15,7 +16,7 @@ void Client::connect() {
     auto endpoints = resolver.resolve(host, std::to_string(port));
 
     boost::asio::async_connect(socket, endpoints,
-                               [this](boost::system::error_code ec, const tcp::endpoint&) {
+                               [this](boost::system::error_code ec, const tcp::endpoint &) {
                                    auto log = Logger::get();
                                    if (!ec) {
                                        connected = true;
@@ -52,7 +53,7 @@ void Client::schedule_reconnect() {
     connected = false;
     socket.close();
     reconnect_timer.expires_after(3s);
-    reconnect_timer.async_wait([this](const boost::system::error_code&) {
+    reconnect_timer.async_wait([this](const boost::system::error_code &) {
         Logger::get()->info("[Client] Attempting reconnect...");
         connect();
     });
@@ -60,10 +61,10 @@ void Client::schedule_reconnect() {
 
 void Client::start_heartbeat() {
     heartbeat_timer.expires_after(5s);
-    heartbeat_timer.async_wait([this](const boost::system::error_code& ec) {
+    heartbeat_timer.async_wait([this](const boost::system::error_code &ec) {
         if (!ec && connected) {
             send_ping();
-            start_heartbeat(); // next
+            start_heartbeat(); // repeat
         }
     });
 }
@@ -74,26 +75,35 @@ void Client::send_ping() {
     send_packet(ping);
 }
 
-void Client::send_message(const std::string& msg) {
+void Client::send_message(const std::string &msg) {
     Packet p(Opcode::CMSG_CHAT_MESSAGE);
     p.write_string(msg);
     send_packet(p);
 }
 
-void Client::send_select_acc_by_username(const std::string& username) {
+void Client::send_select_acc_by_username(const std::string &username) {
     Packet p(Opcode::CMSG_ACCOUNT_LOOKUP_BY_NAME);
     p.write_string(username);
     send_packet(p);
 }
 
-void Client::send_packet(const Packet& packet) {
-    const auto& body = packet.serialize();
+void Client::send_packet(const Packet &packet) {
+    const auto &body = packet.serialize();
 
-    ByteBuffer header;
-    header.write_uint16(static_cast<uint16_t>(body.size() + 2)); // size = body + opcode
-    header.write_uint16(static_cast<uint16_t>(packet.get_opcode()));
+    uint16_t length = static_cast<uint16_t>(body.size() + 2);  // +2 bytes for opcode
+    uint16_t length_be = htons(length);                        // Length = Big Endian
+    uint16_t opcode_le = htole16(static_cast<uint16_t>(packet.get_opcode()));  // Opcode = Little Endian
 
-    std::vector<uint8_t> full_packet = header.data();
+    std::vector<uint8_t> full_packet;
+
+    full_packet.insert(full_packet.end(),
+                       reinterpret_cast<const uint8_t *>(&length_be),
+                       reinterpret_cast<const uint8_t *>(&length_be) + sizeof(length_be));
+
+    full_packet.insert(full_packet.end(),
+                       reinterpret_cast<const uint8_t *>(&opcode_le),
+                       reinterpret_cast<const uint8_t *>(&opcode_le) + sizeof(opcode_le));
+
     full_packet.insert(full_packet.end(), body.begin(), body.end());
 
     if (!connected) {
@@ -113,7 +123,7 @@ void Client::flush_queue() {
     if (!connected || outgoing_queue.empty())
         return;
 
-    auto& front = outgoing_queue.front();
+    auto &front = outgoing_queue.front();
     boost::asio::async_write(socket, boost::asio::buffer(front),
                              [this](boost::system::error_code ec, std::size_t) {
                                  if (ec) {
@@ -128,7 +138,7 @@ void Client::flush_queue() {
 }
 
 void Client::start_receive_loop() {
-    auto header = std::make_shared<std::vector<uint8_t>>(4); // 2 bytes size + 2 bytes opcode!
+    auto header = std::make_shared<std::vector<uint8_t>>(4); // [Length_BE][Opcode_LE]
 
     boost::asio::async_read(socket, boost::asio::buffer(*header),
                             [this, header](boost::system::error_code ec, std::size_t) {
@@ -144,11 +154,14 @@ void Client::start_receive_loop() {
                                     return;
                                 }
 
-                                uint16_t total_size = ((*header)[0] << 8) | (*header)[1];
-                                uint16_t raw_opcode = ((*header)[2] << 8) | (*header)[3];
+                                // [0..1] = Length (Big Endian)
+                                uint16_t total_size = (header->at(0) << 8) | header->at(1);
+
+                                // [2..3] = Opcode (Little Endian)
+                                uint16_t raw_opcode = header->at(2) | (header->at(3) << 8);
                                 Opcode opcode = static_cast<Opcode>(raw_opcode);
 
-                                size_t body_size = total_size - 2;
+                                size_t body_size = total_size - 2; // total size includes opcode
                                 if (body_size == 0) {
                                     log->error("[Client] Invalid body size 0");
                                     connected = false;
@@ -158,13 +171,17 @@ void Client::start_receive_loop() {
 
                                 auto body = std::make_shared<std::vector<uint8_t>>(body_size);
                                 boost::asio::async_read(socket, boost::asio::buffer(*body),
-                                                        [this, body, opcode](boost::system::error_code ec2, std::size_t) {
+                                                        [this, body, opcode](boost::system::error_code ec2,
+                                                                             std::size_t) {
                                                             auto log = Logger::get();
                                                             if (ec2) {
-                                                                if (ec2 == boost::asio::error::operation_aborted || ec2 == boost::asio::error::eof) {
-                                                                    log->info("[Client] Disconnected while reading body");
+                                                                if (ec2 == boost::asio::error::operation_aborted ||
+                                                                    ec2 == boost::asio::error::eof) {
+                                                                    log->info(
+                                                                            "[Client] Disconnected while reading body");
                                                                 } else {
-                                                                    log->error("[Client] Body read failed: {}", ec2.message());
+                                                                    log->error("[Client] Body read failed: {}",
+                                                                               ec2.message());
                                                                 }
                                                                 connected = false;
                                                                 schedule_reconnect();
@@ -174,8 +191,9 @@ void Client::start_receive_loop() {
                                                             try {
                                                                 Packet p = Packet::deserialize(*body, opcode);
                                                                 handle_packet(p);
-                                                            } catch (const std::exception& ex) {
-                                                                log->error("[Client] Failed to parse packet: {}", ex.what());
+                                                            } catch (const std::exception &ex) {
+                                                                log->error("[Client] Failed to parse packet: {}",
+                                                                           ex.what());
                                                             }
 
                                                             start_receive_loop();
@@ -183,7 +201,7 @@ void Client::start_receive_loop() {
                             });
 }
 
-void Client::handle_packet(Packet& p) {
+void Client::handle_packet(Packet &p) {
     auto log = Logger::get();
     switch (p.get_opcode()) {
         case Opcode::SMSG_PONG: {

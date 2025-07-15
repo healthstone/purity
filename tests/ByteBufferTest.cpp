@@ -22,8 +22,9 @@ void test_uint16() {
 
     const auto& data = buf.data();
     assert(data.size() == 2);
-    assert(data[0] == 0x12);
-    assert(data[1] == 0x34);
+    // LE: LSB first
+    assert(data[0] == 0x34);
+    assert(data[1] == 0x12);
 
     ByteBuffer read_buf(data);
     uint16_t val = read_buf.read_uint16();
@@ -36,10 +37,10 @@ void test_uint32() {
 
     const auto& data = buf.data();
     assert(data.size() == 4);
-    assert(data[0] == 0x12);
-    assert(data[1] == 0x34);
-    assert(data[2] == 0x56);
-    assert(data[3] == 0x78);
+    assert(data[0] == 0x78); // LSB
+    assert(data[1] == 0x56);
+    assert(data[2] == 0x34);
+    assert(data[3] == 0x12); // MSB
 
     ByteBuffer read_buf(data);
     uint32_t val = read_buf.read_uint32();
@@ -48,22 +49,22 @@ void test_uint32() {
 
 void test_uint64() {
     ByteBuffer buf;
-    buf.write_uint64(0x1122334455667788);
+    buf.write_uint64(0x1122334455667788ULL);
 
     const auto& data = buf.data();
     assert(data.size() == 8);
-    assert(data[0] == 0x11);
-    assert(data[1] == 0x22);
-    assert(data[2] == 0x33);
-    assert(data[3] == 0x44);
-    assert(data[4] == 0x55);
-    assert(data[5] == 0x66);
-    assert(data[6] == 0x77);
-    assert(data[7] == 0x88);
+    assert(data[0] == 0x88); // LSB
+    assert(data[1] == 0x77);
+    assert(data[2] == 0x66);
+    assert(data[3] == 0x55);
+    assert(data[4] == 0x44);
+    assert(data[5] == 0x33);
+    assert(data[6] == 0x22);
+    assert(data[7] == 0x11); // MSB
 
     ByteBuffer read_buf(data);
     uint64_t val = read_buf.read_uint64();
-    assert(val == 0x1122334455667788);
+    assert(val == 0x1122334455667788ULL);
 }
 
 void test_int8() {
@@ -72,7 +73,7 @@ void test_int8() {
 
     const auto& data = buf.data();
     assert(data.size() == 1);
-    assert(data[0] == static_cast<uint8_t>(-42));  // e.g. 0xD6
+    assert(data[0] == static_cast<uint8_t>(-42)); // e.g. 0xD6
 
     ByteBuffer read_buf(data);
     int8_t val = read_buf.read_int8();
@@ -81,12 +82,15 @@ void test_int8() {
 
 void test_int16() {
     ByteBuffer buf;
-    buf.write_int16(-12345);
+    buf.write_int16(-12345); // 0xCFC7 in hex (two’s complement)
 
     const auto& data = buf.data();
     assert(data.size() == 2);
-    assert(data[0] == static_cast<uint8_t>((-12345 >> 8) & 0xFF)); // should be 0xCF
-    assert(data[1] == static_cast<uint8_t>(-12345 & 0xFF));        // should be 0xC7
+
+    // Проверим через преобразование вручную:
+    uint16_t raw = static_cast<uint16_t>(-12345);
+    assert(data[0] == static_cast<uint8_t>(raw & 0xFF));        // LSB
+    assert(data[1] == static_cast<uint8_t>((raw >> 8) & 0xFF)); // MSB
 
     ByteBuffer read_buf(data);
     int16_t val = read_buf.read_int16();
@@ -100,6 +104,12 @@ void test_int32() {
     const auto& data = buf.data();
     assert(data.size() == 4);
 
+    uint32_t raw = static_cast<uint32_t>(-123456789);
+    assert(data[0] == static_cast<uint8_t>(raw & 0xFF));
+    assert(data[1] == static_cast<uint8_t>((raw >> 8) & 0xFF));
+    assert(data[2] == static_cast<uint8_t>((raw >> 16) & 0xFF));
+    assert(data[3] == static_cast<uint8_t>((raw >> 24) & 0xFF));
+
     ByteBuffer read_buf(data);
     int32_t val = read_buf.read_int32();
     assert(val == -123456789);
@@ -107,14 +117,25 @@ void test_int32() {
 
 void test_int64() {
     ByteBuffer buf;
-    buf.write_int64(-1234567890123456789LL);
+    int64_t original = -1234567890123456789LL;
+    buf.write_int64(original);
 
     const auto& data = buf.data();
     assert(data.size() == 8);
 
+    uint64_t raw = static_cast<uint64_t>(original);
+    assert(data[0] == static_cast<uint8_t>(raw & 0xFF));
+    assert(data[1] == static_cast<uint8_t>((raw >> 8) & 0xFF));
+    assert(data[2] == static_cast<uint8_t>((raw >> 16) & 0xFF));
+    assert(data[3] == static_cast<uint8_t>((raw >> 24) & 0xFF));
+    assert(data[4] == static_cast<uint8_t>((raw >> 32) & 0xFF));
+    assert(data[5] == static_cast<uint8_t>((raw >> 40) & 0xFF));
+    assert(data[6] == static_cast<uint8_t>((raw >> 48) & 0xFF));
+    assert(data[7] == static_cast<uint8_t>((raw >> 56) & 0xFF));
+
     ByteBuffer read_buf(data);
     int64_t val = read_buf.read_int64();
-    assert(val == -1234567890123456789LL);
+    assert(val == original);
 }
 
 void test_float() {
@@ -168,14 +189,16 @@ void test_string() {
     buf.write_string(str);
 
     const auto& data = buf.data();
-    assert(data.size() == 2 + str.size());
-    assert(data[0] == 0x00);
-    assert(data[1] == 0x06);
-    assert(std::string(data.begin() + 2, data.end()) == "Hello!");
+    assert(data.size() == str.size() + 1); // +1 null terminator
+
+    for (size_t i = 0; i < str.size(); ++i) {
+        assert(data[i] == static_cast<uint8_t>(str[i]));
+    }
+    assert(data[str.size()] == 0x00); // Null terminator
 
     ByteBuffer read_buf(data);
     std::string out = read_buf.read_string();
-    assert(out == "Hello!");
+    assert(out == str);
 }
 
 int main() {

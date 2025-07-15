@@ -1,110 +1,132 @@
 #pragma once
 
 #include <vector>
+#include <string>
 #include <cstdint>
 #include <cstring>
 #include <stdexcept>
-#include <string>
+#include <endian.h>  // Linux; на Windows: Winsock2.h или ручной swap
 
 class ByteBuffer {
 public:
-    ByteBuffer() : position_(0) {}
+    ByteBuffer() = default;
 
-    explicit ByteBuffer(const std::vector<uint8_t>& data)
-            : buffer_(data), position_(0) {}
+    // Для чтения из существующего буфера
+    ByteBuffer(const std::vector<uint8_t>& data) : buffer_(data), read_pos_(0) {}
 
-    const std::vector<uint8_t>& data() const { return buffer_; }
-    std::vector<uint8_t>& data() { return buffer_; }
+    // --- WRITE ---
 
     void write_uint8(uint8_t value) { buffer_.push_back(value); }
     void write_uint16(uint16_t value) {
-        buffer_.push_back(static_cast<uint8_t>((value >> 8) & 0xFF));
-        buffer_.push_back(static_cast<uint8_t>(value & 0xFF));
+        uint16_t le = htole16(value);
+        append(reinterpret_cast<uint8_t*>(&le), sizeof(le));
     }
     void write_uint32(uint32_t value) {
-        for (int i = 3; i >= 0; --i) {
-            buffer_.push_back(static_cast<uint8_t>((value >> (i * 8)) & 0xFF));
-        }
+        uint32_t le = htole32(value);
+        append(reinterpret_cast<uint8_t*>(&le), sizeof(le));
     }
     void write_uint64(uint64_t value) {
-        for (int i = 7; i >= 0; --i) {
-            buffer_.push_back(static_cast<uint8_t>((value >> (i * 8)) & 0xFF));
-        }
+        uint64_t le = htole64(value);
+        append(reinterpret_cast<uint8_t*>(&le), sizeof(le));
     }
 
-    void write_int8(int8_t value) { write_uint8(static_cast<uint8_t>(value)); }
-    void write_int16(int16_t value) { write_uint16(static_cast<uint16_t>(value)); }
-    void write_int32(int32_t value) { write_uint32(static_cast<uint32_t>(value)); }
-    void write_int64(int64_t value) { write_uint64(static_cast<uint64_t>(value)); }
+    void write_int8(int8_t value) { buffer_.push_back(static_cast<uint8_t>(value)); }
+    void write_int16(int16_t value) {
+        int16_t le = htole16(value);
+        append(reinterpret_cast<uint8_t*>(&le), sizeof(le));
+    }
+    void write_int32(int32_t value) {
+        int32_t le = htole32(value);
+        append(reinterpret_cast<uint8_t*>(&le), sizeof(le));
+    }
+    void write_int64(int64_t value) {
+        int64_t le = htole64(value);
+        append(reinterpret_cast<uint8_t*>(&le), sizeof(le));
+    }
 
     void write_float(float value) {
-        uint32_t temp;
-        std::memcpy(&temp, &value, sizeof(float));
-        write_uint32(temp);
+        static_assert(sizeof(float) == sizeof(uint32_t), "Unexpected float size");
+        uint32_t raw;
+        std::memcpy(&raw, &value, sizeof(raw));
+        write_uint32(raw);
     }
 
     void write_double(double value) {
-        uint64_t temp;
-        std::memcpy(&temp, &value, sizeof(double));
-        write_uint64(temp);
+        static_assert(sizeof(double) == sizeof(uint64_t), "Unexpected double size");
+        uint64_t raw;
+        std::memcpy(&raw, &value, sizeof(raw));
+        write_uint64(raw);
     }
 
-    void write_bool(bool value) { write_uint8(value ? 1 : 0); }
+    void write_bool(bool value) { buffer_.push_back(value ? 1 : 0); }
 
     void write_string(const std::string& str) {
-        if (str.size() > UINT16_MAX) {
-            throw std::runtime_error("String too long for uint16 length prefix");
-        }
-        write_uint16(static_cast<uint16_t>(str.size()));
-        buffer_.insert(buffer_.end(), str.begin(), str.end());
+        append(reinterpret_cast<const uint8_t*>(str.c_str()), str.size());
+        write_uint8(0x00); // Null-terminated
     }
 
+    void append(const uint8_t* data, size_t size) {
+        buffer_.insert(buffer_.end(), data, data + size);
+    }
+
+    // --- READ ---
+
     uint8_t read_uint8() {
-        check_size(1);
-        return buffer_[position_++];
+        check_read(sizeof(uint8_t));
+        return buffer_[read_pos_++];
     }
 
     uint16_t read_uint16() {
-        check_size(2);
-        uint16_t value = (buffer_[position_] << 8) | buffer_[position_ + 1];
-        position_ += 2;
-        return value;
+        check_read(sizeof(uint16_t));
+        uint16_t le;
+        std::memcpy(&le, &buffer_[read_pos_], sizeof(le));
+        read_pos_ += sizeof(le);
+        return le16toh(le);
     }
 
     uint32_t read_uint32() {
-        check_size(4);
-        uint32_t value = 0;
-        for (int i = 0; i < 4; ++i) {
-            value = (value << 8) | buffer_[position_++];
-        }
-        return value;
+        check_read(sizeof(uint32_t));
+        uint32_t le;
+        std::memcpy(&le, &buffer_[read_pos_], sizeof(le));
+        read_pos_ += sizeof(le);
+        return le32toh(le);
     }
 
     uint64_t read_uint64() {
-        check_size(8);
-        uint64_t value = 0;
-        for (int i = 0; i < 8; ++i) {
-            value = (value << 8) | buffer_[position_++];
-        }
-        return value;
+        check_read(sizeof(uint64_t));
+        uint64_t le;
+        std::memcpy(&le, &buffer_[read_pos_], sizeof(le));
+        read_pos_ += sizeof(le);
+        return le64toh(le);
     }
 
-    int8_t read_int8() { return static_cast<int8_t>(read_uint8()); }
-    int16_t read_int16() { return static_cast<int16_t>(read_uint16()); }
-    int32_t read_int32() { return static_cast<int32_t>(read_uint32()); }
-    int64_t read_int64() { return static_cast<int64_t>(read_uint64()); }
+    int8_t read_int8() {
+        return static_cast<int8_t>(read_uint8());
+    }
+
+    int16_t read_int16() {
+        return static_cast<int16_t>(read_uint16());
+    }
+
+    int32_t read_int32() {
+        return static_cast<int32_t>(read_uint32());
+    }
+
+    int64_t read_int64() {
+        return static_cast<int64_t>(read_uint64());
+    }
 
     float read_float() {
-        uint32_t temp = read_uint32();
+        uint32_t raw = read_uint32();
         float value;
-        std::memcpy(&value, &temp, sizeof(float));
+        std::memcpy(&value, &raw, sizeof(value));
         return value;
     }
 
     double read_double() {
-        uint64_t temp = read_uint64();
+        uint64_t raw = read_uint64();
         double value;
-        std::memcpy(&value, &temp, sizeof(double));
+        std::memcpy(&value, &raw, sizeof(value));
         return value;
     }
 
@@ -113,20 +135,28 @@ public:
     }
 
     std::string read_string() {
-        uint16_t length = read_uint16();
-        check_size(length);
-        std::string str(buffer_.begin() + position_, buffer_.begin() + position_ + length);
-        position_ += length;
+        std::string str;
+        while (read_pos_ < buffer_.size()) {
+            char c = static_cast<char>(buffer_[read_pos_++]);
+            if (c == '\0') break;
+            str += c;
+        }
         return str;
     }
 
-private:
-    std::vector<uint8_t> buffer_;
-    std::size_t position_;
+    // --- ACCESS ---
 
-    void check_size(std::size_t size) {
-        if (position_ + size > buffer_.size()) {
-            throw std::runtime_error("ByteBuffer: Not enough data to read");
+    const std::vector<uint8_t>& data() const { return buffer_; }
+    size_t size() const { return buffer_.size(); }
+    size_t read_pos() const { return read_pos_; }
+
+private:
+    void check_read(size_t size) const {
+        if (read_pos_ + size > buffer_.size()) {
+            throw std::out_of_range("ByteBuffer: not enough data to read");
         }
     }
+
+    std::vector<uint8_t> buffer_;
+    size_t read_pos_ = 0;
 };

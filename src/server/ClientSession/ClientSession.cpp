@@ -72,12 +72,16 @@ void ClientSession::process_read_buffer() {
             return;
 
         uint8_t* data = read_buffer_.read_ptr();
+
+        // [0,1]: Length_BE
         uint16_t total_size = (data[0] << 8) | data[1];
-        uint16_t raw_opcode = (data[2] << 8) | data[3];
+
+        // [2,3]: Opcode_LE
+        uint16_t raw_opcode = data[2] | (data[3] << 8);
 
         Opcode opcode = static_cast<Opcode>(raw_opcode);
 
-        size_t body_size = total_size - 2;
+        size_t body_size = total_size - 2; // payload = total - opcode
 
         if (read_buffer_.get_active_size() < 4 + body_size)
             return; // Пакет ещё не полный
@@ -96,6 +100,7 @@ void ClientSession::process_read_buffer() {
     }
 }
 
+
 // ✅ Безопасная версия send_packet для вызова из любых потоков и корутин
 void ClientSession::send_packet(const Packet& packet) {
     auto self = shared_from_this();
@@ -107,17 +112,29 @@ void ClientSession::send_packet(const Packet& packet) {
     );
 }
 
-/** структура пакета (в big-endian): [2 size][2 opcode][payload] — приватный метод **/
+/**
+ * Отправка пакета клиенту.
+ * Структура пакета: [Length_BE][Opcode_LE][Payload]
+ */
 void ClientSession::do_send_packet(const Packet& packet) {
+    // Получаем только тело (payload без префикса)
     const auto& body = packet.serialize();
 
+    // --- Сборка заголовка ---
     ByteBuffer header;
-    header.write_uint16(static_cast<uint16_t>(body.size() + 2)); // size = body + opcode
-    header.write_uint16(static_cast<uint16_t>(packet.get_opcode())); // cast из enum class!
 
+    uint16_t length = static_cast<uint16_t>(body.size() + 2); // +2 байта на opcode
+    uint16_t length_be = htons(length); // Length всегда Big-Endian
+    uint16_t opcode_le = htole16(static_cast<uint16_t>(packet.get_opcode())); // Opcode всегда Little-Endian
+
+    header.write_uint16(length_be);
+    header.write_uint16(opcode_le);
+
+    // --- Финальный пакет: [Length_BE][Opcode_LE][Payload] ---
     std::vector<uint8_t> full_packet = header.data();
     full_packet.insert(full_packet.end(), body.begin(), body.end());
 
+    // --- Добавляем в очередь отправки ---
     write_queue_.push_back(std::move(full_packet));
 
     if (!writing_) {
