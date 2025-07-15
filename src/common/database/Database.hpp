@@ -4,6 +4,7 @@
 
 #include "PreparedStatement.hpp"
 #include "QueryResults.hpp"
+#include "Logger.hpp"
 
 #include <pqxx/pqxx>
 #include <boost/asio.hpp>
@@ -28,7 +29,7 @@ public:
         for (size_t i = 0; i < pool_size; ++i) {
             auto conn = std::make_unique<pqxx::connection>(conninfo_);
             prepare_all(*conn);
-            std::cout << "[Database] Connection " << i + 1 << " established.\n";
+            Logger::get()->info("[Database] Connection {} established", i + 1);
             connections_.push(std::move(conn));
         }
     }
@@ -43,7 +44,7 @@ public:
             auto &c = connections_.front();
             if (c && c->is_open()) {
                 c->disconnect();
-                std::cout << "[Database] Connection closed.\n";
+                Logger::get()->info("[Database] Connection closed.");
             }
             connections_.pop();
         }
@@ -124,7 +125,7 @@ private:
             return PgRowMapper<Struct>::map(result[0]);
         }
         catch (const pqxx::broken_connection&) {
-            std::cerr << "[Database] Connection broken. Attempting to reconnect.\n";
+            Logger::get()->error("[Database] Connection broken. Attempting to reconnect.");
             conn = reconnect_connection();
             if (!conn) throw std::runtime_error("Reconnection failed");
 
@@ -141,7 +142,7 @@ private:
         connections_.pop();
 
         if (!conn->is_open()) {
-            std::cerr << "[Database] Connection was closed. Reconnecting.\n";
+            Logger::get()->warn("[Database] Connection was closed. Reconnecting.");
             conn = reconnect_connection();
         }
 
@@ -156,16 +157,17 @@ private:
     std::unique_ptr<pqxx::connection> reconnect_connection() {
         auto conn = std::make_unique<pqxx::connection>(conninfo_);
         prepare_all(*conn);
-        std::cout << "[Database] Connection re-established.\n";
+        Logger::get()->info("[Database] Connection re-established.");
         return conn;
     }
 
     void prepare_all(pqxx::connection &conn) {
         pqxx::work txn(conn);
-        conn.prepare("LOGIN_SEL_ACCOUNT_BY_ID",
-                     "SELECT id, name FROM users WHERE id = $1");
-        conn.prepare("UPDATE_SOMETHING",
-                     "UPDATE users SET name = $1 WHERE id = $2");
+        conn.prepare("SELECT_ACCOUNT_BY_USERNAME",
+                     "SELECT id, username, salt, verifier, email, created_at FROM accounts WHERE username = $1");
+        conn.prepare("INSERT_ACCOUNT_BY_USERNAME",
+                    "INSERT INTO accounts (username, salt, verifier) VALUES ($1, $2, $3) RETURNING id"
+        );
         txn.commit();
     }
 

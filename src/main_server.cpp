@@ -5,6 +5,9 @@
 #include <csignal>
 
 int main() {
+    Logger::init_thread_pool();  // Инициализировать thread pool до первого лога!
+    auto log = Logger::get();
+
     try {
         unsigned int network_threads = 4;
         int port = 12345;
@@ -13,19 +16,21 @@ int main() {
         boost::asio::thread_pool pool(network_threads);
 
         // 🟢 Инициализируем базу данных (передаём тот же пул!)
-        auto db = std::make_shared<Database>(pool, "host=185.185.59.232 port=58995 user=postgres password=postgres dbname=postgres", 4);
+        auto db = std::make_shared<Database>(pool,
+                                             "host=185.185.59.232 port=58995 user=postgres password=postgres dbname=postgres",
+                                             4);
 
         // Сервер получает ссылку на pool и готовую БД
         auto server = std::make_shared<Server>(pool.get_executor(), db, port);
 
         server->start_accept();
 
-        std::cout << "[Server] Running on port " << port << "\n";
+        log->info("[Server] Running on port {}", port);
 
         // Перехват SIGINT/SIGTERM
         boost::asio::signal_set signals(pool.get_executor(), SIGINT, SIGTERM);
-        signals.async_wait([&](const boost::system::error_code&, int signal_number) {
-            std::cout << "[Server] Signal " << signal_number << " received, shutting down...\n";
+        signals.async_wait([&](const boost::system::error_code &, int signal_number) {
+            Logger::get()->info("[Server] Signal {} received, shutting down...", signal_number);
             server->stop();
             pool.stop();
         });
@@ -33,10 +38,10 @@ int main() {
         // Запускаем все worker-потоки
         pool.join();
 
-        std::cout << "[Server] Gracefully shut down.\n";
+        log->info("[Server] Gracefully shut down.");
 
-    } catch (const std::exception& e) {
-        std::cerr << "[Server] Exception: " << e.what() << "\n";
+    } catch (const std::exception &e) {
+        Logger::get()->error("[Server] Exception: {}", e.what());
     }
 
     return 0;
