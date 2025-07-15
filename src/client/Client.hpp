@@ -8,7 +8,7 @@
 
 class Client {
 public:
-    Client(boost::asio::io_context &io_context, const std::string &host, int port);
+    Client(boost::asio::io_context &io_context, std::string host, int port);
 
     void connect();
 
@@ -16,7 +16,7 @@ public:
 
     void send_message(const std::string &msg);
 
-    void send_hello(const std::string &msg, const uint8_t &number, const float &value);
+    void send_select_acc_by_username(const std::string &msg);
 
 private:
 
@@ -32,7 +32,7 @@ private:
 
     void start_receive_loop();
 
-    void handle_packet(const Packet &packet);
+    void handle_packet(Packet &packet);
 
     boost::asio::io_context &io;
     boost::asio::ip::tcp::socket socket;

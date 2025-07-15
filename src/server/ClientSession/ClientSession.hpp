@@ -4,7 +4,11 @@
 #include <memory>
 #include <vector>
 #include <deque>
+
 #include "Packet.hpp"
+
+#include "src/server/Server.hpp"
+#include "MessageBuffer.hpp"
 
 class Server; // forward declaration
 
@@ -13,20 +17,30 @@ public:
     ClientSession(boost::asio::ip::tcp::socket socket, std::shared_ptr<Server> server);
 
     void start();
+
     void close();
 
+    bool isOpened() { return closed_; }
+
+    void send_packet(const Packet &packet);
+
+    boost::asio::ip::tcp::socket& socket() {
+        return socket_;
+    }
+    std::shared_ptr<Server> server() const { return server_; }
+
 private:
-    void read_header();
-    void read_body(std::size_t size);
-    void handle_packet(Packet& packet);
-    void send_packet(const Packet& packet);
+    void do_read();
+    void process_read_buffer();
     void do_write();
+    void do_send_packet(const Packet &packet);
 
     boost::asio::ip::tcp::socket socket_;
-    std::vector<uint8_t> header_buffer_;
-    std::vector<uint8_t> body_buffer_;
     std::shared_ptr<Server> server_;
+
+    MessageBuffer read_buffer_;
 
     std::deque<std::vector<uint8_t>> write_queue_;
     bool writing_ = false;
+    std::atomic<bool> closed_{false};
 };
