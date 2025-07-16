@@ -28,25 +28,6 @@ set(COMMON_INCLUDE_DIRS
         ${CMAKE_SOURCE_DIR}/src/common/database
 )
 
-# === Клиент ===
-add_executable(client
-        src/main_client.cpp
-        ${CLIENT_SOURCES}
-)
-
-# Boost::boost и Boost::system автоматически
-target_link_libraries(client PRIVATE
-        Boost::boost Boost::system
-        spdlog::spdlog
-        OpenSSL::Crypto
-)
-
-target_include_directories(client PRIVATE
-        ${COMMON_INCLUDE_DIRS}
-        ${CMAKE_SOURCE_DIR}
-        ${Boost_INCLUDE_DIRS}
-)
-
 # === Сервер ===
 add_executable(server
         src/main_server.cpp

@@ -39,7 +39,7 @@ int main() {
 
         auto db = std::make_shared<Database>(fmt::format("host={} port={} user={} password={} dbname={}",
                                                          db_host, db_port, db_user, db_password, db_name),
-                                             network_threads); // Для каждого потока должна быть своя сессия к бд
+                                             2); // Для каждого потока должна быть своя сессия к бд
 
         // Сервер получает ссылку на pool и готовую БД
         auto server = std::make_shared<Server>(pool, pool.get_executor(), db, port);

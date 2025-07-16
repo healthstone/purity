@@ -1,28 +1,23 @@
 #pragma once
 
 #include "ByteBuffer.hpp"
-#include "opcodes.hpp"
-#include <arpa/inet.h>  // htons()
-#include <endian.h>     // htole16()
+#include <vector>
+#include <string>
+#include <cstdint>
+#include <stdexcept>
 
 class Packet {
+protected:
+    ByteBuffer buffer_;
+
 public:
-    explicit Packet(Opcode opcode)
-            : opcode_(opcode) {}
+    Packet() = default;
 
-    Opcode get_opcode() const { return opcode_; }
-
-    const std::vector<uint8_t>& serialize() const {
-        return buffer_.data();
-    }
+    virtual ~Packet() = default;
 
     ByteBuffer& raw() { return buffer_; }
 
-    static Packet deserialize(const std::vector<uint8_t>& payload, Opcode opcode) {
-        Packet p(opcode);
-        p.buffer_ = ByteBuffer(payload);
-        return p;
-    }
+    const std::vector<uint8_t>& serialize() const { return buffer_.data(); }
 
     // --- Write ---
     void write_uint8(uint8_t value)   { buffer_.write_uint8(value); }
@@ -53,8 +48,4 @@ public:
     float read_float()   { return buffer_.read_float(); }
     bool read_bool()     { return buffer_.read_bool(); }
     std::string read_string() { return buffer_.read_string(); }
-
-private:
-    Opcode opcode_;
-    ByteBuffer buffer_;
 };

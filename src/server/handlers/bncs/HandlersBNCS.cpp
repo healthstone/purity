@@ -1,51 +1,60 @@
-#include "Handlers.hpp"
+#include "HandlersBNCS.hpp"
 #include "Logger.hpp"
-#include "opcodes.hpp"
+#include "packet/opcodes8.hpp"
 
 #include <algorithm>
 
-using namespace Handlers;
+using namespace HandlersBNCS;
 
-void Handlers::dispatch(std::shared_ptr<ClientSession> session, Packet &p) {
-    Opcode opcode = p.get_opcode();
+void HandlersBNCS::dispatch(std::shared_ptr<ClientSession> session, BNETPacket8 &p) {
+    BNETOpcode8 opcode = p.get_id();
 
     switch (opcode) {
-        case Opcode::SID_NULL:
-            Logger::get()->debug("[handler] SID_NULL");
+        case BNETOpcode8::SID_NULL:
+            handle_sid_null(session, p);
             break;
 
-        case Opcode::SID_PING:
+        case BNETOpcode8::SID_INIT:
+            handle_sid_init(session, p);
+            break;
+
+        case BNETOpcode8::SID_PING:
             handle_ping(session, p);
             break;
 
-        case Opcode::SID_AUTH_INFO:
+        case BNETOpcode8::SID_AUTH_INFO:
             handle_auth_info(session, p);
             break;
 
-//        case Opcode::CMSG_ACCOUNT_LOOKUP_BY_NAME:
-//            boost::asio::co_spawn(
-//                    session->server()->thread_pool(),
-//                    handle_auth_select(session, p),
-//                    boost::asio::detached
-//            );
-//            break;
         default:
-            Logger::get()->warn("[handler] Unknown opcode: {}", static_cast<uint16_t>(opcode));
+            Logger::get()->warn("[handler] Unknown opcode: {}", static_cast<uint8_t>(opcode));
             break;
     }
 }
 
-void Handlers::handle_ping(std::shared_ptr<ClientSession> session, Packet &p) {
+void HandlersBNCS::handle_sid_null(std::shared_ptr<ClientSession> session, BNETPacket8 &p) {
+    Logger::get()->debug("[handler] SID_NULL");
+    BNETPacket8 reply(BNETOpcode8::SID_NULL);
+    session->send_packet(reply);
+}
+
+void HandlersBNCS::handle_sid_init(std::shared_ptr<ClientSession> session, BNETPacket8 &p) {
+    Logger::get()->debug("[handler] SID_INIT");
+    BNETPacket8 reply(BNETOpcode8::SID_INIT);
+    session->send_packet(reply);
+}
+
+void HandlersBNCS::handle_ping(std::shared_ptr<ClientSession> session, BNETPacket8 &p) {
     Logger::get()->debug("[handler] CMSG_PING");
     uint32_t pingval = p.read_uint32();
 
-    Packet reply(Opcode::SID_PING);
+    BNETPacket8 reply(BNETOpcode8::SID_PING);
     reply.write_uint32(pingval);
 
     session->send_packet(reply);
 }
 
-void Handlers::handle_auth_info(std::shared_ptr<ClientSession> session, Packet &p) {
+void HandlersBNCS::handle_auth_info(std::shared_ptr<ClientSession> session, BNETPacket8 &p) {
     Logger::get()->debug("[handler] SID_AUTH_INFO");
 
     uint32_t protocol = p.read_uint32(); //Версия BNCS протокола (часто 0)
@@ -98,7 +107,7 @@ JSTR	Japanese StarCraft **/
     uint32_t server_token_ = static_cast<uint32_t>(std::rand());
     session->setServerToken(server_token_);
 
-    Packet reply(Opcode::SID_AUTH_CHECK);
+    BNETPacket8 reply(BNETOpcode8::SID_AUTH_CHECK);
     reply.write_uint32(server_token_);
     reply.write_uint32(0); // UDP value
     reply.write_string("War3Patch.mpq");
@@ -109,37 +118,3 @@ JSTR	Japanese StarCraft **/
     reply.write_string("IX86Ver1.mpq"); // формула — для вида
     session->send_packet(reply);
 }
-
-//boost::asio::awaitable<void> Handlers::handle_auth_select(std::shared_ptr<ClientSession> session, Packet &p) {
-//    auto log = Logger::get();
-//    std::string username = p.read_string();
-//    std::transform(username.begin(), username.end(), username.begin(),
-//                   [](unsigned char c) { return std::tolower(c); });
-//    log->info("[Handlers] CMSG_ACCOUNT_LOOKUP_BY_NAME with username [{}]", username);
-//
-//    PreparedStatement stmt("SELECT_ACCOUNT_BY_USERNAME");
-//    stmt.set_param(0, username);
-//
-//    uint64_t answer_id = 0;
-//    std::string answer_name = "";
-//
-//    // Проверим правильно ли ты вызываешь sync метод в worker потоке
-//    try {
-//        auto user = session->server()->db()->execute_sync<AccountsRow>(stmt);
-//        if (user) {
-//            answer_id = user->id;
-//            answer_name = user->name.value();
-//            log->debug("[handle_auth_select] User '{}' found. ID: {}, created: {}", answer_name, answer_id, TimeUtils::parse_time_point_to_string(user->created_at.value()));
-//        } else {
-//            log->debug("[handle_auth_select] User '{}' not found.", username);
-//        }
-//    } catch (const std::exception& ex) {
-//        Logger::get()->error("DB Exception: {}", ex.what());
-//    }
-//
-//    Packet reply(Opcode::SMSG_ACCOUNT_LOOKUP_BY_NAME);
-//    reply.write_uint64(answer_id);
-//    reply.write_string(answer_name);
-//    session->send_packet(reply);
-//    co_return;
-//}
