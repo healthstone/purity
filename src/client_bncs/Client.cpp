@@ -71,6 +71,7 @@ void Client::start_heartbeat() {
 void Client::send_ping() {
     BNETPacket8 ping(BNETOpcode8::SID_PING);
     send_packet(ping);
+    log->debug("[Client] Sent SID_PING");
 }
 
 void Client::send_message(const std::string &msg) {
