@@ -174,6 +174,10 @@ void ClientSession::send_packet(const BNETPacket8 &packet) {
             });
 }
 
+/**
+ * Отправка пакета клиенту.
+ * Структура BNCS: [ID][Length_LE][Payload]
+ */
 void ClientSession::do_send_packet(const BNETPacket8 &packet) {
     const auto &body = packet.serialize();
     ByteBuffer header;
@@ -206,7 +210,7 @@ void ClientSession::send_packet(const BNETPacket16 &packet) {
 
 /**
  * Отправка пакета клиенту.
- * Структура PvPGN: [Opcode_LE][Length_LE][Payload]
+ * Структура W3GS: [Opcode_LE][Length_LE][Payload]
  */
 void ClientSession::do_send_packet(const BNETPacket16 &packet) {
     const auto &body = packet.serialize();
