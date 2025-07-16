@@ -1,10 +1,13 @@
 #pragma once
 
-#include "ByteBuffer.hpp"
 #include <vector>
 #include <string>
 #include <cstdint>
 #include <stdexcept>
+#include <iomanip>   // Для std::setw, std::setfill
+
+#include "ByteBuffer.hpp"
+#include "Logger.hpp" // Для Logger::get()
 
 class Packet {
 protected:

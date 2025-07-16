@@ -48,10 +48,7 @@ void HandlersBNCS::handle_sid_init(std::shared_ptr<ClientSession> session, BNETP
 
 void HandlersBNCS::handle_ping(std::shared_ptr<ClientSession> session, BNETPacket8 &p) {
     Logger::get()->debug("[handler] CMSG_PING");
-    uint32_t pingval = p.read_uint32();
-
     BNETPacket8 reply(BNETOpcode8::SID_PING);
-    reply.write_uint32(pingval);
     PacketUtils::send_packet_as<BNETPacket8>(std::move(session), reply);
 }
 

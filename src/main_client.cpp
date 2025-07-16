@@ -1,12 +1,15 @@
 #include <boost/asio.hpp>
 #include <csignal>
 #include <iostream>
-#include "client/Client.hpp"
+#include "client_bncs/Client.hpp"
 #include "Logger.hpp"
 
 int main() {
     Logger::init_thread_pool();  // Инициализировать thread pool до первого лога!
     boost::asio::io_context io;
+
+    Logger::get()->info("info");
+    Logger::get()->debug("debug");
 
     auto client = std::make_shared<Client>(io, "127.0.0.1", 6112);
     client->connect();
@@ -23,17 +26,17 @@ int main() {
 //    // Первый таймер — отправка первого пакета через 1000мс
 //    boost::asio::steady_timer timer1(io);
 //    timer1.expires_after(std::chrono::milliseconds(1000));
-//    timer1.async_wait([&client](const boost::system::error_code &ec) {
+//    timer1.async_wait([&client_bncs](const boost::system::error_code &ec) {
 //        if (!ec) {
 //            Logger::get()->info("sending request on lookup account");
-//            client->send_select_acc_by_username("test_User");
+//            client_bncs->send_select_acc_by_username("test_User");
 //        }
 //    });
 
     // Настраиваем сигнал Ctrl+C
     boost::asio::signal_set signals(io, SIGINT, SIGTERM);
     signals.async_wait([&](const boost::system::error_code &, int) {
-        Logger::get()->info("[Main] Caught signal. Disconnecting client...");
+        Logger::get()->info("[Main] Caught signal. Disconnecting client_bncs...");
         client->disconnect();
 
         // Останавливаем io_context после graceful shutdown
@@ -43,5 +46,6 @@ int main() {
     io.run();
 
     Logger::get()->info("[Main] Exiting.");
+    spdlog::shutdown();
     return 0;
 }
