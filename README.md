@@ -25,7 +25,7 @@ Payload — Binary data, encoded with your custom ByteBuffer.
 ### ✅ **ClientSession** (`ClientSession.cpp`)
 - Owns a TCP socket and buffers.
 - Fully **thread-safe**: `send_packet()` posts safely back to the I/O thread.
-- Reads framed packets `[2 size][2 opcode][payload]`.
+- Reads framed packets using handlers and reader from session mode.
 - Uses a `MessageBuffer` for incremental reading.
 - Manages its own lifetime via `shared_from_this()`.
 
