@@ -19,25 +19,30 @@ void ClientSession::start() {
 }
 
 void ClientSession::close() {
-    if (closed_.exchange(true)) {
-        return; // Уже закрыто
-    }
+    if (closed_.exchange(true)) return;
+
+    auto log = Logger::get();
 
     boost::system::error_code ec;
+    socket_.cancel(ec);
+    if (ec && ec != boost::asio::error::operation_aborted && ec != boost::asio::error::eof) {
+        log->error("[client_session][close] Failed to cancel socket: {}", ec.message());
+    }
 
-    if (socket_.is_open()) {
-        socket_.cancel(ec);
-        socket_.shutdown(boost::asio::ip::tcp::socket::shutdown_both, ec);
-        socket_.close(ec);
+    socket_.shutdown(boost::asio::ip::tcp::socket::shutdown_both, ec);
+
+    socket_.close(ec);
+    if (ec && ec != boost::asio::error::operation_aborted && ec != boost::asio::error::eof) {
+        log->error("[client_session][close] Failed to close socket: {}", ec.message());
     }
 
     write_queue_.clear();
 
+    Logger::get()->debug("[client_session][close] closing socket: is_open={} closed_={}", socket_.is_open(), closed_.load());
+
     if (server_) {
         server_->remove_session(shared_from_this());
     }
-
-    Logger::get()->info("[client_session] Closed");
 }
 
 void ClientSession::do_read() {
@@ -51,8 +56,10 @@ void ClientSession::do_read() {
                 auto log = Logger::get();
 
                 if (ec) {
-                    if (ec == boost::asio::error::operation_aborted || ec == boost::asio::error::eof) {
-                        log->info("[client_session] Client disconnected");
+                    if (ec == boost::asio::error::operation_aborted ||
+                        ec == boost::asio::error::eof ||
+                        ec == boost::asio::error::connection_reset) {
+                        log->debug("[client_session][do_read] Client disconnected: {}", ec.message());
                     } else {
                         log->error("[client_session] Read error: {}", ec.message());
                     }

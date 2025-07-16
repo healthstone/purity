@@ -1,5 +1,7 @@
 #include "server/Server.hpp"
 #include "Database.hpp"
+#include "Logger.hpp"
+
 #include <boost/asio.hpp>
 #include <iostream>
 #include <csignal>
@@ -18,52 +20,47 @@ int main() {
         }
         int port = 6112;
 
-        // Единый thread pool на всё приложение
+        // 🟢 Разделяем io_context и thread_pool
+        boost::asio::io_context io_context;
         boost::asio::thread_pool pool(network_threads);
 
-        // 🟢 Инициализируем базу данных (передаём тот же пул!)
-        std::string db_host = std::getenv("DB_URL") ? std::getenv("DB_URL") : "127.0.0.1";
-        log->debug("DB_URL={}", db_host);
+        // 🟢 Настройка БД
+        auto db = std::make_shared<Database>(
+                fmt::format("host={} port={} user={} password={} dbname={}",
+                            std::getenv("DB_URL") ?: "127.0.0.1",
+                            std::getenv("DB_PORT") ?: "5432",
+                            std::getenv("DB_USER") ?: "postgres",
+                            std::getenv("DB_PASSWORD") ?: "postgres",
+                            std::getenv("DB_NAME") ?: "postgres"),
+                2   // Для каждого потока должна быть своя сессия к бд
+        );
 
-        std::string db_port = std::getenv("DB_PORT") ? std::getenv("DB_PORT") : "5432";
-        log->debug("DB_PORT={}", db_port);
-
-        std::string db_user = std::getenv("DB_USER") ? std::getenv("DB_USER") : "postgres";
-        log->debug("DB_USER={}", db_user);
-
-        std::string db_password = std::getenv("DB_PASSWORD") ? std::getenv("DB_PASSWORD") : "postgres";
-        log->debug("DB_PASSWORD={}", db_password);
-
-        std::string db_name = std::getenv("DB_NAME") ? std::getenv("DB_NAME") : "postgres";
-        log->debug("DB_NAME={}", db_name);
-
-        auto db = std::make_shared<Database>(fmt::format("host={} port={} user={} password={} dbname={}",
-                                                         db_host, db_port, db_user, db_password, db_name),
-                                             2); // Для каждого потока должна быть своя сессия к бд
-
-        // Сервер получает ссылку на pool и готовую БД
-        auto server = std::make_shared<Server>(pool, pool.get_executor(), db, port);
-
+        auto server = std::make_shared<Server>(io_context, pool, db, port);
         server->start_accept();
-
         log->info("[Server] Running on port {}", port);
 
-        // Перехват SIGINT/SIGTERM
-        boost::asio::signal_set signals(pool.get_executor(), SIGINT, SIGTERM);
+        // 🟢 Перехват SIGINT
+        boost::asio::signal_set signals(io_context, SIGINT, SIGTERM);
         signals.async_wait([&](const boost::system::error_code &, int signal_number) {
-            Logger::get()->info("[Server] Signal {} received, shutting down...", signal_number);
+            log->info("[Server] Signal {} received, shutting down...", signal_number);
             server->stop();
+            io_context.stop();
             pool.stop();
         });
 
-        // Запускаем все worker-потоки
+        // 🟢 Прокачиваем io_context внутри pool
+        for (unsigned int i = 0; i < network_threads; ++i) {
+            boost::asio::post(pool, [&io_context]() {
+                io_context.run();
+            });
+        }
+
         pool.join();
-
         log->info("[Server] Gracefully shut down.");
-
     } catch (const std::exception &e) {
-        Logger::get()->error("[Server] Exception: {}", e.what());
+        log->error("[Server] Exception: {}", e.what());
     }
 
+    spdlog::shutdown();
     return 0;
 }
