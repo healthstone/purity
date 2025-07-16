@@ -60,6 +60,6 @@ public:
                 << static_cast<int>(data[i]) << " ";
         }
 
-        spdlog::debug("{}", oss.str());
+        Logger::get()->debug("{}", oss.str());
     }
 };
