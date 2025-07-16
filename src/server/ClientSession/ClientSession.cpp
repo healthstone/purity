@@ -15,21 +15,6 @@ void ClientSession::start() {
                          ep.address().to_string(), ep.port());
 
     set_session_mode(SessionMode::BNCS);  // Начинаем с BNCS
-
-//    BNETPacket8 reply(BNETOpcode8::SID_NULL);
-//    send_packet(reply);
-    // После успешного INIT — SID_AUTH_INFO
-//    Packet p;
-//    p.opcode = SID_AUTH_INFO;
-//    p.buffer.write_uint32(0x49583836); // IX86
-//    p.buffer.write_uint32(0x57515233); // W3XP
-//    p.buffer.write_uint32(0x0000001B); // VersionID
-//    p.buffer.write_uint32(0);          // EXE hash
-//    p.buffer.write_uint32(server_token_);
-//    p.buffer.write_uint32(client_token_);
-//    p.buffer.write_string("PvPGN Banner");
-//    send_packet(p);
-
     do_read();
 }
 
