@@ -48,4 +48,18 @@ public:
     float read_float()   { return buffer_.read_float(); }
     bool read_bool()     { return buffer_.read_bool(); }
     std::string read_string() { return buffer_.read_string(); }
+
+    void debug_dump(const std::string& prefix = "[Packet]") const {
+        const auto& data = buffer_.data();
+
+        std::ostringstream oss;
+        oss << prefix << " Dump (" << data.size() << " bytes): ";
+
+        for (size_t i = 0; i < data.size(); ++i) {
+            oss << std::hex << std::setw(2) << std::setfill('0')
+                << static_cast<int>(data[i]) << " ";
+        }
+
+        spdlog::debug("{}", oss.str());
+    }
 };
