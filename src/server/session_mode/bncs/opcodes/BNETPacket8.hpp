@@ -1,7 +1,7 @@
 #pragma once
 
 #include "packet/Packet.hpp"
-#include "opcodes8.hpp"
+#include "src/server/session_mode/bncs/opcodes/opcodes8.hpp"
 #include <endian.h>
 
 class BNETPacket8 : public Packet {
@@ -15,6 +15,23 @@ public:
         BNETPacket8 p(id);
         p.buffer_ = ByteBuffer(payload);
         return p;
+    }
+
+    std::vector<uint8_t> build_packet() const override {
+        const auto& body = serialize();
+
+        ByteBuffer header;
+
+        uint8_t id = static_cast<uint8_t>(get_id());
+        uint16_t length_le = htole16(static_cast<uint16_t>(body.size() + 3)); // 1 байт ID + 2 байта длина
+
+        header.write_uint8(id);
+        header.write_uint16(length_le);
+
+        std::vector<uint8_t> full_packet = header.data();
+        full_packet.insert(full_packet.end(), body.begin(), body.end());
+
+        return full_packet;
     }
 
     void debug_dump(const std::string& prefix = "[Packet]") const override {

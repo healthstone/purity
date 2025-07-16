@@ -1,7 +1,7 @@
 #include "ClientSession.hpp"
-#include "src/server/handlers/bncs/HandlersBNCS.hpp"
-#include "src/server/handlers/w3gs/HandlersW3GS.hpp"
 #include "Logger.hpp"
+#include "src/server/session_mode/bncs/reader/ReaderBNCS.hpp"
+#include "src/server/session_mode/w3gs/reader/ReaderW3GS.hpp"
 #include <iostream>
 
 using boost::asio::ip::tcp;
@@ -82,10 +82,10 @@ void ClientSession::do_read() {
 void ClientSession::process_read_buffer() {
     switch (session_mode_) {
         case SessionMode::BNCS:
-            process_read_buffer_as_bncs();
+            ReaderBNCS::process_read_buffer_as_bncs(shared_from_this());
             break;
         case SessionMode::W3ROUTE:
-            process_read_buffer_as_w3gs();
+            ReaderW3GS::process_read_buffer_as_w3gs(shared_from_this());
             break;
         default:
             Logger::get()->error("[client_session][process_read_buffer] Unknown session mode!");
@@ -93,69 +93,10 @@ void ClientSession::process_read_buffer() {
     }
 }
 
-void ClientSession::process_read_buffer_as_bncs() {
-    auto log = Logger::get();
-    if (read_buffer_.get_active_size() < 3) return;
-
-    uint8_t *data = read_buffer_.read_ptr();
-
-    uint8_t id = data[0];
-    uint16_t length = data[1] | (data[2] << 8);
-
-    if (length < 3) {
-        log->error("[client_session][BNCS] Invalid length < 3: {}", length);
-        close();
-        return;
-    }
-
-    if (read_buffer_.get_active_size() < length) return;
-
-    std::vector<uint8_t> body(data + 3, data + length);
-
-    read_buffer_.read_completed(length);
-    read_buffer_.normalize();
-
-    try {
-        auto packet = BNETPacket8::deserialize(body, static_cast<BNETOpcode8>(id));
-        HandlersBNCS::dispatch(shared_from_this(), packet);
-    } catch (const std::exception &ex) {
-        log->error("[client_session][BNCS] Deserialization failed: {}", ex.what());
-    }
-}
-
-void ClientSession::process_read_buffer_as_w3gs() {
-    auto log = Logger::get();
-
-    if (read_buffer_.get_active_size() < 4) return;
-
-    uint8_t *data = read_buffer_.read_ptr();
-
-    uint16_t raw_opcode = data[0] | (data[1] << 8);
-    uint16_t length = data[2] | (data[3] << 8);
-
-    if (length == 0) {
-        log->error("[client_session][W3GS] Invalid length 0");
-        close();
-        return;
-    }
-
-    if (read_buffer_.get_active_size() < 4 + length) return;
-
-    std::vector<uint8_t> body(data + 4, data + 4 + length);
-
-    read_buffer_.read_completed(4 + length);
-    read_buffer_.normalize();
-
-    try {
-        auto packet = BNETPacket16::deserialize(body, static_cast<BNETOpcode16>(raw_opcode));
-        HandlersW3GS::dispatch(shared_from_this(), packet);
-    } catch (const std::exception &ex) {
-        log->error("[client_session][W3GS] Deserialization failed: {}", ex.what());
-    }
-}
-
-// --- Отправка BNCS ---
-void ClientSession::send_packet(const BNETPacket8 &packet) {
+/**
+ * Обертка для безопасной отправки пакета из любого потока и корутины
+ */
+void ClientSession::send_packet(std::shared_ptr<const Packet> packet) {
     if (closed_) {
         Logger::get()->debug("[client_session][send_packet] called. closed_={}", closed_.load());
         return;
@@ -165,68 +106,15 @@ void ClientSession::send_packet(const BNETPacket8 &packet) {
     boost::asio::post(
             socket_.get_executor(),
             [self, packet]() {
-                self->do_send_packet(packet);
+                self->do_send_packet(*packet);
             });
 }
 
 /**
- * Отправка пакета клиенту.
- * Структура BNCS: [ID][Length_LE][Payload]
+ * Отправка пакета клиенту
  */
-void ClientSession::do_send_packet(const BNETPacket8 &packet) {
-    const auto &body = packet.serialize();
-    ByteBuffer header;
-
-    uint8_t id = static_cast<uint8_t>(packet.get_id());
-    uint16_t length_le = htole16(static_cast<uint16_t>(body.size() + 3));
-
-    header.write_uint8(id);
-    header.write_uint16(length_le);
-
-    std::vector<uint8_t> full_packet = header.data();
-    full_packet.insert(full_packet.end(), body.begin(), body.end());
-
-    write_queue_.push_back(std::move(full_packet));
-
-    if (!writing_) {
-        do_write();
-    }
-}
-
-// --- Отправка W3ROUTE ---
-void ClientSession::send_packet(const BNETPacket16 &packet) {
-    if (closed_) {
-        Logger::get()->debug("[client_session][send_packet] called. closed_={}", closed_.load());
-        return;
-    }
-
-    auto self = shared_from_this();
-    boost::asio::post(
-            socket_.get_executor(),
-            [self, packet]() {
-                self->do_send_packet(packet);
-            });
-}
-
-/**
- * Отправка пакета клиенту.
- * Структура W3GS: [Opcode_LE][Length_LE][Payload]
- */
-void ClientSession::do_send_packet(const BNETPacket16 &packet) {
-    const auto &body = packet.serialize();
-
-    // --- Сборка заголовка ---
-    ByteBuffer header;
-
-    uint16_t opcode_le = htole16(static_cast<uint16_t>(packet.get_opcode()));
-    uint16_t length_le = htole16(static_cast<uint16_t>(body.size()));
-
-    header.write_uint16(opcode_le);
-    header.write_uint16(length_le);
-
-    std::vector<uint8_t> full_packet = header.data();
-    full_packet.insert(full_packet.end(), body.begin(), body.end());
-
+void ClientSession::do_send_packet(const Packet &packet) {
+    std::vector<uint8_t> full_packet = packet.build_packet();
     write_queue_.push_back(std::move(full_packet));
 
     if (!writing_) {

@@ -1,8 +1,10 @@
 #include "HandlersBNCS.hpp"
 #include "Logger.hpp"
-#include "packet/opcodes8.hpp"
+#include "src/server/session_mode/bncs/opcodes/opcodes8.hpp"
+#include "packet/PacketUtils.hpp"
 
 #include <algorithm>
+#include <utility>
 
 using namespace HandlersBNCS;
 
@@ -35,13 +37,13 @@ void HandlersBNCS::dispatch(std::shared_ptr<ClientSession> session, BNETPacket8 
 void HandlersBNCS::handle_sid_null(std::shared_ptr<ClientSession> session, BNETPacket8 &p) {
     Logger::get()->debug("[handler] SID_NULL");
     BNETPacket8 reply(BNETOpcode8::SID_NULL);
-    session->send_packet(reply);
+    PacketUtils::send_packet_as<BNETPacket8>(std::move(session), reply);
 }
 
 void HandlersBNCS::handle_sid_init(std::shared_ptr<ClientSession> session, BNETPacket8 &p) {
     Logger::get()->debug("[handler] SID_INIT");
     BNETPacket8 reply(BNETOpcode8::SID_INIT);
-    session->send_packet(reply);
+    PacketUtils::send_packet_as<BNETPacket8>(std::move(session), reply);
 }
 
 void HandlersBNCS::handle_ping(std::shared_ptr<ClientSession> session, BNETPacket8 &p) {
@@ -50,8 +52,7 @@ void HandlersBNCS::handle_ping(std::shared_ptr<ClientSession> session, BNETPacke
 
     BNETPacket8 reply(BNETOpcode8::SID_PING);
     reply.write_uint32(pingval);
-
-    session->send_packet(reply);
+    PacketUtils::send_packet_as<BNETPacket8>(std::move(session), reply);
 }
 
 void HandlersBNCS::handle_auth_info(std::shared_ptr<ClientSession> session, BNETPacket8 &p) {
@@ -116,5 +117,5 @@ JSTR	Japanese StarCraft **/
     reply.write_uint32(0); // value3
     reply.write_uint32(0); // exe_info
     reply.write_string("IX86Ver1.mpq"); // формула — для вида
-    session->send_packet(reply);
+    PacketUtils::send_packet_as<BNETPacket8>(std::move(session), reply);
 }

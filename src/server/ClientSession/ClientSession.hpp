@@ -8,8 +8,8 @@
 
 #include "src/server/Server.hpp"
 #include "MessageBuffer.hpp"
-#include "packet/BNETPacket8.hpp"
-#include "packet/BNETPacket16.hpp"
+#include "src/server/session_mode/bncs/opcodes/BNETPacket8.hpp"
+#include "src/server/session_mode/w3gs/opcodes/BNETPacket16.hpp"
 
 class Server; // forward declaration
 
@@ -23,36 +23,45 @@ public:
     ClientSession(boost::asio::ip::tcp::socket socket, std::shared_ptr<Server> server);
 
     void start();
+
     void close();
 
     bool isOpened() const { return !closed_; }
 
-    void send_packet(const BNETPacket8 &packet);
-    void send_packet(const BNETPacket16 &packet);
+    void send_packet(std::shared_ptr<const Packet> packet);
 
-    boost::asio::ip::tcp::socket& socket() { return socket_; }
+    boost::asio::ip::tcp::socket &socket() { return socket_; }
+
     std::shared_ptr<Server> server() const { return server_; }
 
     // PvPGN handshake данные
-    void setArchTag(const uint32_t& val) { archtag_ = val; }
-    void setClientTag(const uint32_t& val) { clienttag_ = val; }
-    void setVersionId(const uint32_t& val) { versionid_ = val; }
-    void setServerToken(const uint32_t& val) { servertoken_ = val; }
-    void setClientToken_(const uint32_t& val) { clienttoken_ = val; }
+    void setArchTag(const uint32_t &val) { archtag_ = val; }
+
+    void setClientTag(const uint32_t &val) { clienttag_ = val; }
+
+    void setVersionId(const uint32_t &val) { versionid_ = val; }
+
+    void setServerToken(const uint32_t &val) { servertoken_ = val; }
+
+    void setClientToken_(const uint32_t &val) { clienttoken_ = val; }
 
     // Режим: BNCS или W3ROUTE
     void set_session_mode(SessionMode mode) { session_mode_ = mode; }
+
     SessionMode get_session_mode() const { return session_mode_; }
+
+    MessageBuffer& read_buffer() {
+        return read_buffer_;
+    }
 
 private:
     void do_read();
+
     void process_read_buffer();
-    void process_read_buffer_as_bncs();
-    void process_read_buffer_as_w3gs();
+
     void do_write();
 
-    void do_send_packet(const BNETPacket8 &packet);
-    void do_send_packet(const BNETPacket16 &packet);
+    void do_send_packet(const Packet &packet);
 
     boost::asio::ip::tcp::socket socket_;
     std::shared_ptr<Server> server_;

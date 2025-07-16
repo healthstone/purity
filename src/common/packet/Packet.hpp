@@ -17,6 +17,8 @@ public:
 
     ByteBuffer &raw() { return buffer_; }
 
+    virtual std::vector<uint8_t> build_packet() const = 0;
+
     const std::vector<uint8_t> &serialize() const { return buffer_.data(); }
 
     // --- Write ---

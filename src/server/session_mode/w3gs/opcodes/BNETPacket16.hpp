@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Packet.hpp"
+#include "packet/Packet.hpp"
 #include "opcodes16.hpp"
 #include <arpa/inet.h>
 #include <endian.h>
@@ -16,6 +16,24 @@ public:
         BNETPacket16 p(opcode);
         p.buffer_ = ByteBuffer(payload);
         return p;
+    }
+
+    std::vector<uint8_t> build_packet() const override {
+        const auto& body = serialize();
+
+        // --- Сборка заголовка ---
+        ByteBuffer header;
+
+        uint16_t opcode_le = htole16(static_cast<uint16_t>(get_opcode()));
+        uint16_t length_le = htole16(static_cast<uint16_t>(body.size()));
+
+        header.write_uint16(opcode_le);
+        header.write_uint16(length_le);
+
+        std::vector<uint8_t> full_packet = header.data();
+        full_packet.insert(full_packet.end(), body.begin(), body.end());
+
+        return full_packet;
     }
 
     void debug_dump(const std::string& prefix = "[Packet]") const override {
