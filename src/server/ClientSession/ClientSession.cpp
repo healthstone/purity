@@ -1,6 +1,7 @@
 #include "ClientSession.hpp"
-#include "src/server/handlers/Handlers.hpp"
 #include "Logger.hpp"
+#include "src/server/SessionMode/bncs/reader/ReaderBNCS.hpp"
+#include "src/server/SessionMode/w3gs/reader/ReaderW3GS.hpp"
 #include <iostream>
 
 using boost::asio::ip::tcp;
@@ -9,28 +10,44 @@ ClientSession::ClientSession(tcp::socket socket, std::shared_ptr<Server> server)
         : socket_(std::move(socket)), server_(std::move(server)), read_buffer_(4096) {}
 
 void ClientSession::start() {
+    auto ep = socket_.remote_endpoint();
+    Logger::get()->debug("[client_session][start] New connection from {}:{}",
+                         ep.address().to_string(), ep.port());
+
+    set_session_mode(SessionMode::BNCS);  // Начинаем с BNCS
     do_read();
 }
 
 void ClientSession::close() {
-    if (closed_.exchange(true)) {
-        return; // Уже закрыто
-    }
+    if (closed_.exchange(true)) return;
+
+    auto log = Logger::get();
 
     boost::system::error_code ec;
-
-    if (socket_.is_open()) {
-        socket_.shutdown(boost::asio::ip::tcp::socket::shutdown_both, ec);
-        socket_.close(ec);
+    socket_.cancel(ec);
+    if (ec && ec != boost::asio::error::operation_aborted && ec != boost::asio::error::eof) {
+        log->error("[client_session][close] Failed to cancel socket: {}", ec.message());
     }
 
+    socket_.shutdown(boost::asio::ip::tcp::socket::shutdown_both, ec);
+    if (ec && ec != boost::asio::error::operation_aborted &&
+        ec != boost::asio::error::eof &&
+        ec != boost::asio::error::not_connected) {
+        log->error("[client_session][close] Failed to shutdown socket: {}", ec.message());
+    }
+    socket_.close(ec);
+    if (ec && ec != boost::asio::error::operation_aborted && ec != boost::asio::error::eof) {
+        log->error("[client_session][close] Failed to close socket: {}", ec.message());
+    }
+
+    read_buffer_.clear();
     write_queue_.clear();
+
+    log->debug("[client_session][close] Socket closed. closed_={}", closed_.load());
 
     if (server_) {
         server_->remove_session(shared_from_this());
     }
-
-    Logger::get()->info("[client_session] Closed");
 }
 
 void ClientSession::do_read() {
@@ -42,99 +59,62 @@ void ClientSession::do_read() {
             boost::asio::buffer(read_buffer_.write_ptr(), read_buffer_.get_remaining_space()),
             [this, self](boost::system::error_code ec, std::size_t bytes_transferred) {
                 auto log = Logger::get();
-
                 if (ec) {
-                    if (ec == boost::asio::error::operation_aborted || ec == boost::asio::error::eof) {
-                        log->info("[client_session] Client disconnected");
+                    if (ec == boost::asio::error::operation_aborted ||
+                        ec == boost::asio::error::eof ||
+                        ec == boost::asio::error::connection_reset) {
+                        log->debug("[client_session][do_read] Client disconnected: {}", ec.message());
                     } else {
-                        log->error("[client_session] Read error: {}", ec.message());
+                        log->error("[client_session][do_read] Read error: {}", ec.message());
                     }
                     close();
                     return;
                 }
 
+                if (!isOpened()) return;
                 read_buffer_.write_completed(bytes_transferred);
                 process_read_buffer();
-
-                if (!closed_) {
-                    do_read();
-                }
+                if (isOpened()) do_read();
             }
     );
 }
 
 void ClientSession::process_read_buffer() {
-    auto log = Logger::get();
-
-    while (true) {
-        // Нужно хотя бы 4 байта: 2 size + 2 opcode
-        if (read_buffer_.get_active_size() < 4)
-            return;
-
-        uint8_t* data = read_buffer_.read_ptr();
-
-        // [0,1]: Length_BE
-        uint16_t total_size = (data[0] << 8) | data[1];
-
-        // [2,3]: Opcode_LE
-        uint16_t raw_opcode = data[2] | (data[3] << 8);
-
-        Opcode opcode = static_cast<Opcode>(raw_opcode);
-
-        size_t body_size = total_size - 2; // payload = total - opcode
-
-        if (read_buffer_.get_active_size() < 4 + body_size)
-            return; // Пакет ещё не полный
-
-        std::vector<uint8_t> body(data + 4, data + 4 + body_size);
-
-        read_buffer_.read_completed(4 + body_size);
-        read_buffer_.normalize();
-
-        try {
-            Packet packet = Packet::deserialize(body, opcode);
-            Handlers::dispatch(shared_from_this(), packet);
-        } catch (const std::exception& ex) {
-            log->error("[client_session] Packet deserialization failed: {}", ex.what());
-        }
+    switch (session_mode_) {
+        case SessionMode::BNCS:
+            ReaderBNCS::process_read_buffer_as_bncs(shared_from_this());
+            break;
+        case SessionMode::W3ROUTE:
+            ReaderW3GS::process_read_buffer_as_w3gs(shared_from_this());
+            break;
+        default:
+            Logger::get()->error("[client_session][process_read_buffer] Unknown session mode!");
+            break;
     }
 }
 
+/**
+ * Обертка для безопасной отправки пакета из любого потока и корутины
+ */
+void ClientSession::send_packet(std::shared_ptr<const Packet> packet) {
+    if (closed_) {
+        Logger::get()->debug("[client_session][send_packet] called. closed_={}", closed_.load());
+        return;
+    }
 
-// ✅ Безопасная версия send_packet для вызова из любых потоков и корутин
-void ClientSession::send_packet(const Packet& packet) {
     auto self = shared_from_this();
     boost::asio::post(
             socket_.get_executor(),
             [self, packet]() {
-                self->do_send_packet(packet);
-            }
-    );
+                self->do_send_packet(*packet);
+            });
 }
 
 /**
- * Отправка пакета клиенту.
- * Структура пакета: [Length_BE][Opcode_LE][Payload]
+ * Отправка пакета клиенту
  */
-void ClientSession::do_send_packet(const Packet& packet) {
-    // Получаем только тело (payload без префикса)
-    const auto& body = packet.serialize();
-
-    // --- Сборка заголовка ---
-    ByteBuffer header;
-
-    uint16_t length = static_cast<uint16_t>(body.size() + 2); // +2 байта на opcode
-    uint16_t length_be = htons(length); // Length всегда Big-Endian
-    uint16_t opcode_le = htole16(static_cast<uint16_t>(packet.get_opcode())); // Opcode всегда Little-Endian
-
-    header.write_uint16(length_be);
-    header.write_uint16(opcode_le);
-
-    // --- Финальный пакет: [Length_BE][Opcode_LE][Payload] ---
-    std::vector<uint8_t> full_packet = header.data();
-    full_packet.insert(full_packet.end(), body.begin(), body.end());
-
-    // --- Добавляем в очередь отправки ---
+void ClientSession::do_send_packet(const Packet &packet) {
+    std::vector<uint8_t> full_packet = packet.build_packet();
     write_queue_.push_back(std::move(full_packet));
 
     if (!writing_) {

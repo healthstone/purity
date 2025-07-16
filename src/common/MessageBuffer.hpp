@@ -17,6 +17,13 @@ public:
         _rpos = 0;
     }
 
+    void clear() {
+        reset();
+        _storage.clear();
+        // Можно зарезервировать обратно начальный размер:
+        _storage.shrink_to_fit();
+    }
+
     uint8_t* base() { return _storage.data(); }
     uint8_t* read_ptr() { return base() + _rpos; }
     uint8_t* write_ptr() { return base() + _wpos; }

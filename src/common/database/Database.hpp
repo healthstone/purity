@@ -3,7 +3,6 @@
 #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 
 #include <pqxx/pqxx>
-#include <boost/asio/thread_pool.hpp>
 #include <mutex>
 #include <queue>
 #include <memory>

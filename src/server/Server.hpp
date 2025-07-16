@@ -8,34 +8,23 @@
 #include "Database.hpp"
 #include "ClientSession/ClientSession.hpp"
 
-class ClientSession; // Forward, хотя подключение есть — можно убрать, но не мешает
+class ClientSession;
 
 class Server : public std::enable_shared_from_this<Server> {
 public:
-    Server(boost::asio::thread_pool &pool,
-           boost::asio::any_io_executor executor,
+    Server(boost::asio::io_context &io_context,
            std::shared_ptr<Database> db,
            int port);
 
     void start_accept();
-
     void stop();
-
     void remove_session(std::shared_ptr<ClientSession> session);
-
     void log_session_count();
 
-    boost::asio::thread_pool &thread_pool() { return pool_; }
-
-    // Доступ к БД
-    std::shared_ptr<Database> db() { return db_; }
-
 private:
-    boost::asio::any_io_executor executor_;
+    boost::asio::io_context &io_context_;
     boost::asio::ip::tcp::acceptor acceptor_;
-
-    std::shared_ptr<Database> db_;  // <- Главное, shared_ptr!
-    boost::asio::thread_pool &pool_;
+    std::shared_ptr<Database> db_;
 
     std::unordered_set<std::shared_ptr<ClientSession>> sessions_;
     std::mutex sessions_mutex_;

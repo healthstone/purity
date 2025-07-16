@@ -1,0 +1,71 @@
+#pragma once
+
+#include "packet/Packet.hpp"
+#include "opcodes16.hpp"
+#include <arpa/inet.h>
+#include <endian.h>
+
+class BNETPacket16 : public Packet {
+public:
+    explicit BNETPacket16(BNETOpcode16 opcode)
+            : opcode_(opcode) {}
+
+    BNETOpcode16 get_opcode() const { return opcode_; }
+
+    static BNETPacket16 deserialize(const std::vector<uint8_t>& payload, BNETOpcode16 opcode) {
+        BNETPacket16 p(opcode);
+        p.buffer_ = ByteBuffer(payload);
+        return p;
+    }
+
+    std::vector<uint8_t> build_packet() const override {
+        const auto& body = serialize();
+
+        // --- Сборка заголовка ---
+        ByteBuffer header;
+
+        uint16_t opcode_le = htole16(static_cast<uint16_t>(get_opcode()));
+        uint16_t length_le = htole16(static_cast<uint16_t>(body.size()));
+
+        header.write_uint16(opcode_le);
+        header.write_uint16(length_le);
+
+        std::vector<uint8_t> full_packet = header.data();
+        full_packet.insert(full_packet.end(), body.begin(), body.end());
+
+        return full_packet;
+    }
+
+    void debug_dump(const std::string& prefix = "[Packet]") const override {
+        auto log = Logger::get();
+
+        std::ostringstream oss;
+
+        uint16_t id = static_cast<uint16_t>(get_opcode());
+        const auto& payload = serialize();
+        uint16_t length = static_cast<uint16_t>(payload.size() + 4); // 2 байта opcode + 2 байта length
+
+        oss << prefix << " [BNETPacket16] Dump: ID=0x"
+            << fmt::format("{:04X}", id)
+            << " Length_LE=" << length
+            << " PayloadSize=" << payload.size() << " bytes\n";
+
+        oss << prefix << " Raw: ";
+
+        // Opcode (2 байта, little-endian)
+        oss << fmt::format("{:02X} {:02X} ", id & 0xFF, (id >> 8) & 0xFF);
+
+        // Length (2 байта, little-endian)
+        oss << fmt::format("{:02X} {:02X} ", length & 0xFF, (length >> 8) & 0xFF);
+
+        // Payload
+        for (auto b : payload) {
+            oss << fmt::format("{:02X} ", b);
+        }
+
+        log->debug("{}", oss.str());
+    }
+
+private:
+    BNETOpcode16 opcode_;
+};

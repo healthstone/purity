@@ -4,7 +4,7 @@
 #include <queue>
 #include <string>
 #include <vector>
-#include "Packet.hpp"
+#include "src/server/SessionMode/bncs/opcodes/BNETPacket8.hpp"
 
 class Client {
 public:
@@ -16,8 +16,6 @@ public:
 
     void send_message(const std::string &msg);
 
-    void send_select_acc_by_username(const std::string &msg);
-
 private:
 
     void schedule_reconnect();
@@ -26,13 +24,13 @@ private:
 
     void send_ping();
 
-    void send_packet(const Packet &packet);
+    void send_packet(const BNETPacket8 &packet);
 
     void flush_queue();
 
     void start_receive_loop();
 
-    void handle_packet(Packet &packet);
+    void handle_packet(BNETPacket8 &packet);
 
     boost::asio::io_context &io;
     boost::asio::ip::tcp::socket socket;
