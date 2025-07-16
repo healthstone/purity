@@ -80,7 +80,6 @@ void ClientSession::do_read() {
 }
 
 void ClientSession::process_read_buffer() {
-    //if (!isOpened()) return;
     switch (session_mode_) {
         case SessionMode::BNCS:
             process_read_buffer_as_bncs();
@@ -95,9 +94,7 @@ void ClientSession::process_read_buffer() {
 }
 
 void ClientSession::process_read_buffer_as_bncs() {
-    //if (!isOpened()) return;
     auto log = Logger::get();
-
     if (read_buffer_.get_active_size() < 3) return;
 
     uint8_t *data = read_buffer_.read_ptr();
@@ -127,7 +124,6 @@ void ClientSession::process_read_buffer_as_bncs() {
 }
 
 void ClientSession::process_read_buffer_as_w3gs() {
-    //if (!isOpened()) return;
     auto log = Logger::get();
 
     if (read_buffer_.get_active_size() < 4) return;
