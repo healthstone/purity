@@ -1,7 +1,7 @@
 #pragma once
 
 #include "packet/Packet.hpp"
-#include "src/server/session_mode/bncs/opcodes/opcodes8.hpp"
+#include "opcodes8.hpp"
 #include <endian.h>
 
 class BNETPacket8 : public Packet {

@@ -1,7 +1,7 @@
 #include <boost/asio.hpp>
 #include <csignal>
 #include <iostream>
-#include "client_bncs/Client.hpp"
+#include "ClientBNCS/Client.hpp"
 #include "Logger.hpp"
 
 int main() {

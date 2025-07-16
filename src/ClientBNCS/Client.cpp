@@ -1,6 +1,5 @@
 #include "Client.hpp"
 #include "Logger.hpp"
-#include "src/server/session_mode/bncs/opcodes/BNETPacket8.hpp"
 #include <utility>
 
 using boost::asio::ip::tcp;

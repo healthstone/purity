@@ -1,6 +1,6 @@
 #include "HandlersW3GS.hpp"
 #include "Logger.hpp"
-#include "src/server/session_mode/w3gs/opcodes/opcodes16.hpp"
+
 #include "packet/PacketUtils.hpp"
 
 using namespace HandlersW3GS;

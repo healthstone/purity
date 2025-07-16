@@ -4,17 +4,18 @@ This C++ project implements a **Asynchronous server** using **Boost.Asio**, a cu
 
 ## Key Components
 
-## 📦 Packet Structure
-
-Every TCP packet uses the **MMORPG** binary framing:
+### ✅ **Session Mode**
+- Contains a **HandlersBNCS** and **ReaderBNCS** that routes packets for BNCS structure: `[ID][Length_LE][Payload]`
+- Contains a **HandlersW3GS** and **ReaderW3GS** that routes packets for W3GS structure: `[Opcode_LE][Length_LE][Payload]`
+- Easy way for create your own style or repeat another, for example World of Warcraft style: `[2 bytes Length_BE][2 bytes Opcode_LE][Payload]`
 
 ```
-[2 bytes Length_BE][2 bytes Opcode_LE][Payload]
+BE = Big Endian
+LE = Little Endian
+Payload — Binary data, encoded with your custom ByteBuffer.
 ```
 
-- Length_BE — Total length of [Opcode + Payload] in Big Endian.
-- Opcode_LE — Packet opcode as Little Endian.
-- Payload — Binary data, encoded with your custom ByteBuffer.
+- For each SessionMode you can create child of Packet with new structure. All methods (read_uint8, write_uint8 and etc... ) already exist and tested by ByteBufferTest
 
 ### ✅ **Handlers** (`Handlers.cpp`)
 - Contains a **dispatch system** that routes packets by opcode.

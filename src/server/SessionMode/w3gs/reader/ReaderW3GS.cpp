@@ -1,4 +1,4 @@
-#include "src/server/session_mode/w3gs/handlers/HandlersW3GS.hpp"
+#include "src/server/SessionMode/w3gs/handlers/HandlersW3GS.hpp"
 #include "ReaderW3GS.hpp"
 
 using namespace ReaderW3GS;

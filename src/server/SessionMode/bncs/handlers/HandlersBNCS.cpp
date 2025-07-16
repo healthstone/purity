@@ -1,10 +1,9 @@
-#include "HandlersBNCS.hpp"
-#include "Logger.hpp"
-#include "src/server/session_mode/bncs/opcodes/opcodes8.hpp"
-#include "packet/PacketUtils.hpp"
-
 #include <algorithm>
 #include <utility>
+
+#include "HandlersBNCS.hpp"
+#include "Logger.hpp"
+#include "packet/PacketUtils.hpp"
 
 using namespace HandlersBNCS;
 

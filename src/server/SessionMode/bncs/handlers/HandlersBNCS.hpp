@@ -1,5 +1,7 @@
 #include <memory>
 #include "src/server/ClientSession/ClientSession.hpp"
+#include "src/server/SessionMode/bncs/opcodes/opcodes8.hpp"
+#include "src/server/SessionMode/bncs/opcodes/BNETPacket8.hpp"
 
 namespace HandlersBNCS {
 

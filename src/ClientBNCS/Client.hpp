@@ -4,7 +4,7 @@
 #include <queue>
 #include <string>
 #include <vector>
-#include "src/server/session_mode/bncs/opcodes/BNETPacket8.hpp"
+#include "src/server/SessionMode/bncs/opcodes/BNETPacket8.hpp"
 
 class Client {
 public:

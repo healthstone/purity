@@ -8,8 +8,7 @@
 
 #include "src/server/Server.hpp"
 #include "MessageBuffer.hpp"
-#include "src/server/session_mode/bncs/opcodes/BNETPacket8.hpp"
-#include "src/server/session_mode/w3gs/opcodes/BNETPacket16.hpp"
+#include "packet/Packet.hpp"
 
 class Server; // forward declaration
 

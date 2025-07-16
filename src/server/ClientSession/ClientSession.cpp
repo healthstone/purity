@@ -1,7 +1,7 @@
 #include "ClientSession.hpp"
 #include "Logger.hpp"
-#include "src/server/session_mode/bncs/reader/ReaderBNCS.hpp"
-#include "src/server/session_mode/w3gs/reader/ReaderW3GS.hpp"
+#include "src/server/SessionMode/bncs/reader/ReaderBNCS.hpp"
+#include "src/server/SessionMode/w3gs/reader/ReaderW3GS.hpp"
 #include <iostream>
 
 using boost::asio::ip::tcp;

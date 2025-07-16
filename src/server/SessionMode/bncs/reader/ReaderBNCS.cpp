@@ -1,5 +1,5 @@
 #include "ReaderBNCS.hpp"
-#include "src/server/session_mode/bncs/handlers/HandlersBNCS.hpp"
+#include "src/server/SessionMode/bncs/handlers/HandlersBNCS.hpp"
 
 using namespace ReaderBNCS;
 
