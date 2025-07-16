@@ -13,7 +13,6 @@ class ClientSession;
 class Server : public std::enable_shared_from_this<Server> {
 public:
     Server(boost::asio::io_context &io_context,
-           boost::asio::thread_pool &pool,
            std::shared_ptr<Database> db,
            int port);
 
@@ -24,7 +23,6 @@ public:
 
 private:
     boost::asio::io_context &io_context_;
-    boost::asio::thread_pool &pool_;
     boost::asio::ip::tcp::acceptor acceptor_;
     std::shared_ptr<Database> db_;
 

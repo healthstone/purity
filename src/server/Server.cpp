@@ -5,12 +5,9 @@
 using boost::asio::ip::tcp;
 
 Server::Server(boost::asio::io_context &io_context,
-               boost::asio::thread_pool &pool,
                std::shared_ptr<Database> db,
                int port)
-        : io_context_(io_context),
-          pool_(pool),
-          acceptor_(io_context, tcp::endpoint(tcp::v4(), port)),
+        : io_context_(io_context), acceptor_(io_context, tcp::endpoint(tcp::v4(), port)),
           db_(std::move(db)) {}
 
 void Server::start_accept() {
@@ -20,15 +17,15 @@ void Server::start_accept() {
             [self = shared_from_this()](boost::system::error_code ec, tcp::socket socket) {
                 auto log = Logger::get();
                 if (ec) {
-                    if (ec == boost::asio::error::operation_aborted) {
-                        log->info("[Server] Accept aborted");
-                    }
-                    else
+                    if (ec != boost::asio::error::operation_aborted &&
+                        ec != boost::asio::error::eof) {
                         log->error("[Server] Accept failed: {}", ec.message());
+                    }
                     return;
                 }
 
                 auto session = std::make_shared<ClientSession>(std::move(socket), self);
+
                 {
                     std::lock_guard<std::mutex> lock(self->sessions_mutex_);
                     self->sessions_.insert(session);
@@ -44,6 +41,7 @@ void Server::start_accept() {
 
 void Server::stop() {
     auto log = Logger::get();
+
     boost::system::error_code ec;
     acceptor_.cancel(ec);
     if (ec && ec != boost::asio::error::operation_aborted && ec != boost::asio::error::eof) {
@@ -55,13 +53,26 @@ void Server::stop() {
         log->error("[Server] Failed to close acceptor: {}", ec.message());
     }
 
+    // Для избежания dead lock'a, нужно делать копию списка, закрыть открытые сокеты (где тоже мьютекс)
     {
-        std::lock_guard<std::mutex> lock(sessions_mutex_);
-        for (auto &s : sessions_) {
+        std::unordered_set<std::shared_ptr<ClientSession>> sessions_copy;
+        {
+            std::lock_guard<std::mutex> lock(sessions_mutex_);
+            sessions_copy = sessions_;
+        }
+
+        for (auto &s : sessions_copy) {
             if (s->isOpened()) s->close();
         }
+    }
+
+    // Теперь очищаем список
+    {
+        std::lock_guard<std::mutex> lock(sessions_mutex_);
         sessions_.clear();
     }
+
+    io_context_.stop();
 
     // ✅ Корректно закрываем все DB connections:
     if (db_) db_->shutdown();

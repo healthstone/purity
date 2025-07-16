@@ -20,9 +20,8 @@ int main() {
         }
         int port = 6112;
 
-        // 🟢 Разделяем io_context и thread_pool
+        // 🟢 Используем только io_context
         boost::asio::io_context io_context;
-        boost::asio::thread_pool pool(network_threads);
 
         // 🟢 Настройка БД
         auto db = std::make_shared<Database>(
@@ -35,27 +34,25 @@ int main() {
                 2   // Для каждого потока должна быть своя сессия к бд
         );
 
-        auto server = std::make_shared<Server>(io_context, pool, db, port);
+        auto server = std::make_shared<Server>(io_context, db, port);
         server->start_accept();
         log->info("[Server] Running on port {}", port);
 
-        // 🟢 Перехват SIGINT
         boost::asio::signal_set signals(io_context, SIGINT, SIGTERM);
         signals.async_wait([&](const boost::system::error_code &, int signal_number) {
             log->info("[Server] Signal {} received, shutting down...", signal_number);
             server->stop();
-            io_context.stop();
-            pool.stop();
         });
 
-        // 🟢 Прокачиваем io_context внутри pool
+        std::vector<std::thread> threads;
         for (unsigned int i = 0; i < network_threads; ++i) {
-            boost::asio::post(pool, [&io_context]() {
+            threads.emplace_back([&io_context]() {
                 io_context.run();
             });
         }
 
-        pool.join();
+        for (auto &t : threads) t.join();
+
         log->info("[Server] Gracefully shut down.");
     } catch (const std::exception &e) {
         log->error("[Server] Exception: {}", e.what());
