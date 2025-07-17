@@ -5,13 +5,14 @@ This C++ project implements a **Asynchronous server** using **Boost.Asio**, a cu
 ## Key Components
 
 ### ✅ **Session Mode**
-- Contains a **HandlersBNCS** and **ReaderBNCS** that routes packets for BNCS structure: `[ID][Length_LE][Payload]`
-- Contains a **HandlersW3GS** and **ReaderW3GS** that routes packets for W3GS structure: `[Opcode_LE][Length_LE][Payload]`
-- Easy way for create your own style or repeat another, for example World of Warcraft style: `[2 bytes Length_BE][2 bytes Opcode_LE][Payload]`
+- Contains a **HandlersBNCS** and **ReaderBNCS** that routes packets for BNCS structure: `[ID][Length][Payload]`
+- Contains a **HandlersW3GS** and **ReaderW3GS** that routes packets for W3GS structure: `[Opcode_LE][Length][Payload]`
+- Easy way for create your own style or repeat another, for example World of Warcraft style: `[2 bytes Length][2 bytes Opcode][Payload]`
 
 ```
-BE = Big Endian
-LE = Little Endian
+You can read and write each field in packet as you need:
+- BE = Big Endian
+- LE = Little Endian
 Payload — Binary data, encoded with your custom ByteBuffer.
 ```
 
