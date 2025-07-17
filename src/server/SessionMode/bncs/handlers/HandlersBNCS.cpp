@@ -27,6 +27,10 @@ void HandlersBNCS::dispatch(std::shared_ptr<ClientSession> session, BNETPacket8 
             handle_auth_info(session, p);
             break;
 
+        case BNETOpcode8::SID_STOPADV:
+            handle_sid_stopadv(session, p);
+            break;
+
         default:
             Logger::get()->warn("[handler] Unknown opcode: {}", static_cast<uint8_t>(opcode));
             break;
@@ -43,6 +47,11 @@ void HandlersBNCS::handle_sid_init(std::shared_ptr<ClientSession> session, BNETP
     Logger::get()->debug("[handler] SID_INIT");
     BNETPacket8 reply(BNETOpcode8::SID_INIT);
     PacketUtils::send_packet_as<BNETPacket8>(std::move(session), reply);
+}
+
+void HandlersBNCS::handle_sid_stopadv(std::shared_ptr<ClientSession> session, BNETPacket8 &p) {
+    uint32_t game_id = p.read_uint32(); // ID игры, которую нужно удалить
+    Logger::get()->debug("[handler] SID_STOPADV id: {}", game_id);
 }
 
 void HandlersBNCS::handle_ping(std::shared_ptr<ClientSession> session, BNETPacket8 &p) {

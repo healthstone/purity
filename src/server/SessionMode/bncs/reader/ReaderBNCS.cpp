@@ -3,59 +3,66 @@
 
 using namespace ReaderBNCS;
 
-/**
- * Чтение пакетов от клиента.
- * Структура BNCS: [ID][Length_LE][Payload]
- *
- * ЛИБО пакеты [ID][Payload]
- */
 void ReaderBNCS::process_read_buffer_as_bncs(std::shared_ptr<ClientSession> session) {
     auto log = Logger::get();
     auto& buffer = session->read_buffer();
 
-    // Чтение с явным указанием Little-Endian
-    auto read_le16 = [](const uint8_t* data) {
-        return static_cast<uint16_t>(data[0]) | (static_cast<uint16_t>(data[1]) << 8);
-    };
-
-    // Минимальный размер - 1 байт (opcode)
+    // Минимальный размер для проверки - 1 байт (opcode)
     if (buffer.get_active_size() < 1) return;
 
     const uint8_t* data = buffer.read_ptr();
-    const uint8_t id_raw = data[0];
+    const uint8_t opcode = data[0];
 
-    // Жёсткая проверка opcode (BNCS использует только 0x01-0x7F)
-    if (id_raw == 0 || id_raw >= 0x80) {
-        log->warn("Invalid BNCS opcode: 0x{:02X}", id_raw);
-        session->close();
-        return;
-    }
+    // Специальная обработка Warcraft III клиента
+    if (buffer.get_active_size() >= 3 &&
+        data[0] == 0x01 &&
+        data[1] == 0xFF &&
+        data[2] == 0x50) {
 
-    // Специальная обработка SID_AUTH_INFO (0x50)
-    if (id_raw == 0x50) {
-        constexpr size_t W3_AUTH_INFO_SIZE = 49; // 1 + 48
-        if (buffer.get_active_size() < W3_AUTH_INFO_SIZE) return;
+        // Полный размер начального пакета W3 (1 + 48 = 49 байт)
+        constexpr size_t W3_INIT_PACKET_SIZE = 49;
 
-        // Проверка сигнатуры War3 (первые 4 байта: 00 00 00 00)
-        if (std::memcmp(data + 1, "\0\0\0\0", 4) != 0) {
-            log->warn("Invalid W3 auth packet structure");
+        if (buffer.get_active_size() < W3_INIT_PACKET_SIZE) return;
+
+        // Проверка сигнатуры W3 (первые 4 байта после заголовка должны быть 0)
+        if (std::memcmp(data + 3, "\0\0\0\0", 4) != 0) {
+            log->warn("Invalid W3 auth packet signature");
             session->close();
             return;
         }
 
-        auto body = std::vector<uint8_t>(data + 1, data + W3_AUTH_INFO_SIZE);
-        buffer.read_completed(W3_AUTH_INFO_SIZE);
-        process_valid_packet(session, static_cast<BNETOpcode8>(id_raw), body);
+        // Обрабатываем как SID_AUTH_INFO (0x50)
+        auto body = std::vector<uint8_t>(data + 1, data + W3_INIT_PACKET_SIZE);
+        buffer.read_completed(W3_INIT_PACKET_SIZE);
+        process_valid_packet(session, BNETOpcode8::SID_AUTH_INFO, body);
         return;
     }
 
-    // Стандартные BNCS пакеты (требуют 3 байта минимум)
+    // Стандартная обработка BNCS пакетов
+    if (opcode == 0 || opcode >= 0x80) {
+        log->warn("Invalid BNCS opcode: 0x{:02X}", opcode);
+        session->close();
+        return;
+    }
+
+    // Обработка пакетов фиксированного размера
+    const auto expected_size = get_packet_expected_size(static_cast<BNETOpcode8>(opcode));
+    if (expected_size > 0) {
+        const size_t total_size = 1 + expected_size;
+        if (buffer.get_active_size() < total_size) return;
+
+        auto body = std::vector<uint8_t>(data + 1, data + total_size);
+        buffer.read_completed(total_size);
+        process_valid_packet(session, static_cast<BNETOpcode8>(opcode), body);
+        return;
+    }
+
+    // Обработка пакетов с переменной длиной (стандартные BNCS)
     if (buffer.get_active_size() < 3) return;
 
-    // Явное чтение длины в Little-Endian
-    const uint16_t length = read_le16(data + 1);
+    const uint16_t length = (static_cast<uint16_t>(data[1]) << 8 | static_cast<uint16_t>(data[2]));
 
-    // Жёсткие ограничения длины (3-2048 байт)
+    // Валидация длины пакета
     if (length < 3 || length > 2048) {
         log->error("Invalid packet length: {} (header: {:02X} {:02X} {:02X})",
                    length, data[0], data[1], data[2]);
@@ -65,25 +72,17 @@ void ReaderBNCS::process_read_buffer_as_bncs(std::shared_ptr<ClientSession> sess
 
     if (buffer.get_active_size() < length) return;
 
-    // Дополнительные проверки для специфичных пакетов
-    if (id_raw == 0x01 && length != 8) { // SID_STOPADV должен быть 8 байт
-        log->warn("Invalid SID_STOPADV packet");
-        session->close();
-        return;
-    }
-
-    // Извлечение тела пакета
     auto body = std::vector<uint8_t>(data + 3, data + length);
     buffer.read_completed(length);
-    process_valid_packet(session, static_cast<BNETOpcode8>(id_raw), body);
+    process_valid_packet(session, static_cast<BNETOpcode8>(opcode), body);
 }
 
 void ReaderBNCS::process_valid_packet(std::shared_ptr<ClientSession> session,
-                                      BNETOpcode8 id,
+                                      BNETOpcode8 opcode,
                                       const std::vector<uint8_t>& body) {
     auto log = Logger::get();
     try {
-        auto packet = BNETPacket8::deserialize(body, id);
+        auto packet = BNETPacket8::deserialize(body, opcode);
         HandlersBNCS::dispatch(session, packet);
     } catch (const std::exception& ex) {
         log->error("Packet processing failed: {}", ex.what());
@@ -91,19 +90,19 @@ void ReaderBNCS::process_valid_packet(std::shared_ptr<ClientSession> session,
     }
 }
 
-size_t ReaderBNCS::get_packet_expected_size(BNETOpcode8 id) {
-    switch (id) {
-        // WarCraft 3
-        case BNETOpcode8::SID_AUTH_INFO:    return 48;
-        case BNETOpcode8::SID_AUTH_CHECK:   return 32;
-        case BNETOpcode8::SID_W3_LEAVECHAT: return 0;
-        case BNETOpcode8::SID_W3_GAMELIST:  return 4;
+size_t ReaderBNCS::get_packet_expected_size(BNETOpcode8 opcode) {
+    static const std::unordered_map<BNETOpcode8, size_t> fixed_size_packets = {
+            // WarCraft 3
+            {BNETOpcode8::SID_AUTH_INFO,    48},  // 0x50
+            {BNETOpcode8::SID_AUTH_CHECK,   32},  // 0x51
+            {BNETOpcode8::SID_W3_LEAVECHAT, 0},   // 0x0A
+            {BNETOpcode8::SID_W3_GAMELIST,  4},   // 0x09
 
             // Diablo 2
-        case BNETOpcode8::SID_AUTH_ACCOUNTLOGON:      return 72;
-        case BNETOpcode8::SID_AUTH_ACCOUNTLOGONPROOF: return 20;
+            {BNETOpcode8::SID_AUTH_ACCOUNTLOGON,      72},  // 0x53
+            {BNETOpcode8::SID_AUTH_ACCOUNTLOGONPROOF, 20}   // 0x54
+    };
 
-            // Прочие (стандартная обработка)
-        default: return 0;
-    }
+    auto it = fixed_size_packets.find(opcode);
+    return it != fixed_size_packets.end() ? it->second : 0;
 }

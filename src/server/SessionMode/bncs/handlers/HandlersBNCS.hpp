@@ -11,6 +11,8 @@ namespace HandlersBNCS {
 
     void handle_sid_init(std::shared_ptr<ClientSession> session, BNETPacket8 &p);
 
+    void handle_sid_stopadv(std::shared_ptr<ClientSession> session, BNETPacket8 &p);
+
     void handle_ping(std::shared_ptr<ClientSession> session, BNETPacket8 &p);
 
     void handle_auth_info(std::shared_ptr<ClientSession> session, BNETPacket8 &p);
