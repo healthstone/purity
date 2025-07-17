@@ -1,19 +1,20 @@
 #pragma once
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 
 #include <pqxx/pqxx>
 #include <mutex>
 #include <queue>
 #include <memory>
 #include <optional>
+#include <condition_variable>
+#include <chrono>
+
 #include "QueryResults.hpp"
 #include "PreparedStatement.hpp"
 #include "Logger.hpp"
 
 class Database {
 public:
-    Database(const std::string &conninfo, size_t pool_size = 4)
+    explicit Database(const std::string &conninfo, size_t pool_size = 4)
             : conninfo_(conninfo) {
         for (size_t i = 0; i < pool_size; ++i) {
             auto conn = std::make_unique<pqxx::connection>(conninfo_);
@@ -28,7 +29,7 @@ public:
     }
 
     void shutdown() {
-        std::lock_guard<std::mutex> lock(mutex_);
+        std::unique_lock<std::mutex> lock(mutex_);
         while (!connections_.empty()) {
             auto &c = connections_.front();
             if (c && c->is_open()) {
@@ -39,14 +40,37 @@ public:
         }
     }
 
-    /// Чётко называется как sync, чтобы никто не звал co_await
+    /// RAII-хелпер
+    class ScopedConnection {
+    public:
+        ScopedConnection(Database &db, std::unique_ptr<pqxx::connection> conn)
+                : db_(db), conn_(std::move(conn)) {}
+
+        ~ScopedConnection() {
+            if (conn_) db_.release_connection(std::move(conn_));
+        }
+
+        pqxx::connection &get() { return *conn_; }
+
+    private:
+        Database &db_;
+        std::unique_ptr<pqxx::connection> conn_;
+    };
+
+    /// Получить RAII обертку с таймаутом
+    ScopedConnection acquire_scoped_connection(std::chrono::milliseconds timeout = std::chrono::seconds(5)) {
+        auto conn = acquire_connection(timeout);
+        if (!conn) throw std::runtime_error("No DB connection available after timeout");
+        return ScopedConnection(*this, std::move(conn));
+    }
+
+    /// Выполнить запрос синхронно
     template<typename Struct>
     std::optional<Struct> execute_sync(const PreparedStatement &stmt) {
-        auto conn = acquire_connection();
-        if (!conn) throw std::runtime_error("No DB connection available");
+        auto scoped = acquire_scoped_connection();
 
         try {
-            pqxx::work txn(*conn);
+            pqxx::work txn(scoped.get());
             auto invoc = txn.prepared(stmt.name());
             for (const auto &param: stmt.params()) {
                 if (param.has_value()) {
@@ -58,8 +82,6 @@ public:
 
             auto result = invoc.exec();
             txn.commit();
-
-            release_connection(std::move(conn));
 
             if constexpr (std::is_same_v<Struct, NothingRow>) {
                 return Struct{};
@@ -73,18 +95,21 @@ public:
         }
         catch (const pqxx::broken_connection &) {
             Logger::get()->error("[Database] Connection broken. Attempting to reconnect.");
-            conn = reconnect_connection();
-            if (!conn) throw std::runtime_error("Reconnection failed");
-
-            release_connection(std::move(conn));
+            auto reconnect = reconnect_connection();
+            if (!reconnect) throw std::runtime_error("Reconnection failed");
             throw;
         }
     }
 
 private:
-    std::unique_ptr<pqxx::connection> acquire_connection() {
-        std::lock_guard<std::mutex> lock(mutex_);
-        if (connections_.empty()) return nullptr;
+    std::unique_ptr<pqxx::connection> acquire_connection(std::chrono::milliseconds timeout) {
+        std::unique_lock<std::mutex> lock(mutex_);
+        if (connections_.empty()) {
+            if (!cond_.wait_for(lock, timeout, [this] { return !connections_.empty(); })) {
+                // timeout
+                return nullptr;
+            }
+        }
 
         auto conn = std::move(connections_.front());
         connections_.pop();
@@ -98,8 +123,11 @@ private:
     }
 
     void release_connection(std::unique_ptr<pqxx::connection> conn) {
-        std::lock_guard<std::mutex> lock(mutex_);
-        connections_.push(std::move(conn));
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            connections_.push(std::move(conn));
+        }
+        cond_.notify_one();
     }
 
     std::unique_ptr<pqxx::connection> reconnect_connection() {
@@ -121,6 +149,5 @@ private:
     std::string conninfo_;
     std::queue<std::unique_ptr<pqxx::connection>> connections_;
     std::mutex mutex_;
+    std::condition_variable cond_;
 };
-
-#pragma GCC diagnostic pop
