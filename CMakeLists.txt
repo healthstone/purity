@@ -1,18 +1,17 @@
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.11)
 project(purity)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 find_package(OpenSSL REQUIRED)
-
-# Современный Boost
 find_package(Boost REQUIRED COMPONENTS system)
-
-# PostgreSQL и pqxx
 find_package(PostgreSQL REQUIRED)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(PQXX REQUIRED libpqxx)
+
+# Добавляем Catch2 через FetchContent
+find_package(Catch2 REQUIRED)
 
 # spdlog
 set(SPDLOG_DIR ${CMAKE_SOURCE_DIR}/deps/spdlog-1.15.3)
@@ -34,7 +33,6 @@ add_executable(client
         ${CLIENT_SOURCES}
 )
 
-# Boost::boost и Boost::system автоматически
 target_link_libraries(client PRIVATE
         Boost::boost Boost::system
         spdlog::spdlog
@@ -51,7 +49,6 @@ target_include_directories(client PRIVATE
 add_executable(server
         src/main_server.cpp
         ${SERVER_SOURCES}
-        ${COMMON_INCLUDE_DIRS}
 )
 
 target_link_libraries(server PRIVATE
@@ -71,16 +68,19 @@ target_include_directories(server PRIVATE
 )
 
 # === Тесты ===
-add_executable(test
+add_executable(tests
         tests/ByteBufferTest.cpp
         ${TEST_SOURCES}
 )
 
-target_link_libraries(test PRIVATE
+target_link_libraries(tests PRIVATE
         Boost::boost Boost::system
+        Catch2::Catch2WithMain
+        OpenSSL::Crypto
+        ${COMMON_SOURCES}  # Линкуем общие исходники
 )
 
-target_include_directories(test PRIVATE
+target_include_directories(tests PRIVATE
         ${COMMON_INCLUDE_DIRS}
         ${CMAKE_SOURCE_DIR}
         ${Boost_INCLUDE_DIRS}

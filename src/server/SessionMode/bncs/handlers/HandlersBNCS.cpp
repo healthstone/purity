@@ -91,7 +91,7 @@ void HandlersBNCS::handle_auth_info(std::shared_ptr<ClientSession> session, BNET
     std::string langstr = p.read_string_raw(4);
     std::string countrystr = p.read_string_raw(4);
 
-    p.debug_dump("SID_AUTH_INFO");
+    //p.debug_dump("SID_AUTH_INFO");
 
     Logger::get()->debug(
             "[handler] SID_AUTH_INFO:\n"

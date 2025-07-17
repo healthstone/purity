@@ -95,8 +95,12 @@ This makes it easy to configure the server without changing the source code! ✅
 ---
 
 ## Requirements
+```
+boost - library (boost.org)
+```
 
-**sudo apt install libssl-dev libpq-dev libpqxx-dev pkg-config**
+
+**sudo apt install libssl-dev libpq-dev libpqxx-dev pkg-config catch2**
 
 ## ⚡️Compilation
 
