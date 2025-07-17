@@ -1,4 +1,6 @@
 #pragma once
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 
 #include <pqxx/pqxx>
 #include <mutex>
@@ -151,3 +153,5 @@ private:
     std::mutex mutex_;
     std::condition_variable cond_;
 };
+
+#pragma GCC diagnostic pop
