@@ -16,4 +16,6 @@ namespace HandlersBNCS {
     void handle_ping(std::shared_ptr<ClientSession> session, BNETPacket8 &p);
 
     void handle_auth_info(std::shared_ptr<ClientSession> session, BNETPacket8 &p);
+
+    void handle_auth_check(std::shared_ptr<ClientSession> session, BNETPacket8 &p);
 }

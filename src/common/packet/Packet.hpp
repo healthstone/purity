@@ -4,10 +4,10 @@
 #include <string>
 #include <cstdint>
 #include <stdexcept>
-#include <iomanip>   // Для std::setw, std::setfill
-
+#include <iomanip>
+#include <sstream>
 #include "ByteBuffer.hpp"
-#include "Logger.hpp" // Для Logger::get()
+#include "Logger.hpp"
 
 class Packet {
 protected:
@@ -15,66 +15,88 @@ protected:
 
 public:
     Packet() = default;
-
     virtual ~Packet() = default;
 
-    ByteBuffer &raw() { return buffer_; }
-
+    ByteBuffer& raw() { return buffer_; }
     virtual std::vector<uint8_t> build_packet() const = 0;
+    const std::vector<uint8_t>& serialize() const { return buffer_.data(); }
 
-    const std::vector<uint8_t> &serialize() const { return buffer_.data(); }
+    // ==================== WRITE METHODS ====================
 
-    // --- Write ---
-    void write_uint8(uint8_t value) { buffer_.write_uint8(value); }
+    // ---------- Big-Endian ----------
+    void write_uint8_be(uint8_t value) { buffer_.write_uint8_be(value); }
+    void write_int8_be(int8_t value) { buffer_.write_int8_be(value); }
+    void write_uint16_be(uint16_t value) { buffer_.write_uint16_be(value); }
+    void write_int16_be(int16_t value) { buffer_.write_int16_be(value); }
+    void write_uint32_be(uint32_t value) { buffer_.write_uint32_be(value); }
+    void write_int32_be(int32_t value) { buffer_.write_int32_be(value); }
+    void write_uint64_be(uint64_t value) { buffer_.write_uint64_be(value); }
+    void write_int64_be(int64_t value) { buffer_.write_int64_be(value); }
+    void write_float_be(float value) { buffer_.write_float_be(value); }
+    void write_double_be(double value) { buffer_.write_double_be(value); }
 
-    void write_uint16(uint16_t value) { buffer_.write_uint16(value); }
+    // ---------- Little-Endian ----------
+    void write_uint8_le(uint8_t value) { buffer_.write_uint8_le(value); }
+    void write_int8_le(int8_t value) { buffer_.write_int8_le(value); }
+    void write_uint16_le(uint16_t value) { buffer_.write_uint16_le(value); }
+    void write_int16_le(int16_t value) { buffer_.write_int16_le(value); }
+    void write_uint32_le(uint32_t value) { buffer_.write_uint32_le(value); }
+    void write_int32_le(int32_t value) { buffer_.write_int32_le(value); }
+    void write_uint64_le(uint64_t value) { buffer_.write_uint64_le(value); }
+    void write_int64_le(int64_t value) { buffer_.write_int64_le(value); }
+    void write_float_le(float value) { buffer_.write_float_le(value); }
+    void write_double_le(double value) { buffer_.write_double_le(value); }
 
-    void write_uint32(uint32_t value) { buffer_.write_uint32(value); }
-
-    void write_uint64(uint64_t value) { buffer_.write_uint64(value); }
-
-    void write_int8(int8_t value) { buffer_.write_int8(value); }
-
-    void write_int16(int16_t value) { buffer_.write_int16(value); }
-
-    void write_int32(int32_t value) { buffer_.write_int32(value); }
-
-    void write_int64(int64_t value) { buffer_.write_int64(value); }
-
-    void write_float(float value) { buffer_.write_float(value); }
-
+    // ---------- Boolean ----------
     void write_bool(bool value) { buffer_.write_bool(value); }
 
-    void write_string(const std::string &str) { buffer_.write_string(str); }
+    // ---------- Strings ----------
+    void write_string_nt(const std::string& str) { buffer_.write_string_nt(str); }
+    void write_string_raw(const std::string& str) { buffer_.write_string_raw(str); }
 
-    // --- Read ---
-    uint8_t read_uint8() { return buffer_.read_uint8(); }
+    // ==================== READ METHODS ====================
 
-    uint16_t read_uint16() { return buffer_.read_uint16(); }
+    // ---------- Big-Endian ----------
+    uint8_t read_uint8_be() { return buffer_.read_uint8_be(); }
+    int8_t read_int8_be() { return buffer_.read_int8_be(); }
+    uint16_t read_uint16_be() { return buffer_.read_uint16_be(); }
+    int16_t read_int16_be() { return buffer_.read_int16_be(); }
+    uint32_t read_uint32_be() { return buffer_.read_uint32_be(); }
+    int32_t read_int32_be() { return buffer_.read_int32_be(); }
+    uint64_t read_uint64_be() { return buffer_.read_uint64_be(); }
+    int64_t read_int64_be() { return buffer_.read_int64_be(); }
+    float read_float_be() { return buffer_.read_float_be(); }
+    double read_double_be() { return buffer_.read_double_be(); }
 
-    uint32_t read_uint32() { return buffer_.read_uint32(); }
+    // ---------- Little-Endian ----------
+    uint8_t read_uint8_le() { return buffer_.read_uint8_le(); }
+    int8_t read_int8_le() { return buffer_.read_int8_le(); }
+    uint16_t read_uint16_le() { return buffer_.read_uint16_le(); }
+    int16_t read_int16_le() { return buffer_.read_int16_le(); }
+    uint32_t read_uint32_le() { return buffer_.read_uint32_le(); }
+    int32_t read_int32_le() { return buffer_.read_int32_le(); }
+    uint64_t read_uint64_le() { return buffer_.read_uint64_le(); }
+    int64_t read_int64_le() { return buffer_.read_int64_le(); }
+    float read_float_le() { return buffer_.read_float_le(); }
+    double read_double_le() { return buffer_.read_double_le(); }
 
-    uint64_t read_uint64() { return buffer_.read_uint64(); }
-
-    int8_t read_int8() { return buffer_.read_int8(); }
-
-    int16_t read_int16() { return buffer_.read_int16(); }
-
-    int32_t read_int32() { return buffer_.read_int32(); }
-
-    int64_t read_int64() { return buffer_.read_int64(); }
-
-    float read_float() { return buffer_.read_float(); }
-
+    // ---------- Boolean ----------
     bool read_bool() { return buffer_.read_bool(); }
 
-    std::string read_string() { return buffer_.read_string(); }
+    // ---------- Strings ----------
+    std::string read_string_nt() { return buffer_.read_string_nt(); }
+    std::string read_string_raw(size_t length) { return buffer_.read_string_raw(length); }
 
-    virtual void debug_dump(const std::string &prefix = "[Packet]") const {
-        const auto &data = buffer_.data();
+    // ==================== UTILITY METHODS ====================
+    void skip(size_t bytes) { buffer_.skip(bytes); }
+    size_t read_pos() const { return buffer_.read_pos(); }
+    size_t size() const { return buffer_.size(); }
+
+    virtual void debug_dump(const std::string& prefix = "[Packet]") const {
+        const auto& data = buffer_.data();
 
         std::ostringstream oss;
-        oss << prefix << " Dump (" << data.size() << " bytes): ";
+        oss << "[" << prefix << "] Dump (" << data.size() << ") bytes: ";
 
         for (size_t i = 0; i < data.size(); ++i) {
             oss << std::hex << std::setw(2) << std::setfill('0')

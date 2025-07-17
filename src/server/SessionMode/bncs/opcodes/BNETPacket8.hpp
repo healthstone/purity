@@ -24,7 +24,7 @@ public:
             case BNETOpcode8::SID_AUTH_CHECK:
             case BNETOpcode8::SID_W3_LEAVECHAT:
             case BNETOpcode8::SID_W3_GAMELIST:
-            // Diablo 2
+                // Diablo 2
             case BNETOpcode8::SID_AUTH_ACCOUNTLOGON:
             case BNETOpcode8::SID_AUTH_ACCOUNTLOGONPROOF: {
                 return build_packet_without_length();
@@ -35,33 +35,37 @@ public:
         }
     }
 
+    // [ID][Length BE][Payload]
     std::vector<uint8_t> build_packet_with_length() const {
-        const auto& body = serialize();
+        const auto &body = serialize();
 
         ByteBuffer header;
 
-        uint8_t id = static_cast<uint8_t>(get_id());
-        uint16_t length_be = htobe16(static_cast<uint16_t>(body.size() + 3)); // BE вместо LE
+        // Заголовок: [ID][Length BE][Payload]
+        header.write_uint8_be(static_cast<uint8_t>(get_id()));
+        header.write_uint16_be(static_cast<uint16_t>(body.size() + 3)); // +3 байта на заголовок
 
-        header.write_uint8(id);
-        header.write_uint16(length_be); // Записываем в BE порядке
+        // Эффективное объединение данных
+        std::vector<uint8_t> full_packet;
+        full_packet.reserve(header.size() + body.size());
 
-        std::vector<uint8_t> full_packet = header.data();
+        const auto &header_data = header.data();
+        full_packet.insert(full_packet.end(), header_data.begin(), header_data.end());
         full_packet.insert(full_packet.end(), body.begin(), body.end());
 
         return full_packet;
     }
 
+    // [ID][Payload]
     std::vector<uint8_t> build_packet_without_length() const {
-        const auto &body = serialize(); // Сериализованные данные (Payload)
+        const auto &body = serialize();
 
         ByteBuffer packet;
 
-        // Записываем ID пакета (1 байт)
-        uint8_t id = static_cast<uint8_t>(get_id());
-        packet.write_uint8(id);
+        // Заголовок: [ID]
+        packet.write_uint8_be(static_cast<uint8_t>(get_id()));
 
-        // Добавляем тело пакета (Payload) используя метод append
+        // Тело пакета
         packet.append(body.data(), body.size());
 
         return packet.data();
@@ -69,29 +73,17 @@ public:
 
     void debug_dump(const std::string &prefix = "[Packet]") const override {
         auto log = Logger::get();
-
-        std::ostringstream oss;
-
         uint8_t id = static_cast<uint8_t>(get_id());
         const auto &payload = serialize();
-        uint16_t length = static_cast<uint16_t>(payload.size() + 3);
 
-        oss << prefix << " [BNETPacket8] Dump: ID=0x"
+        std::ostringstream oss;
+        oss << "[" << prefix << "] Dump: ID=0x"
             << fmt::format("{:02X}", id)
-            << " Length_LE=" << length
-            << " PayloadSize=" << payload.size() << " bytes\n";
+            << " PayloadSize=" << payload.size() << " bytes: ";
 
-        oss << prefix << " Raw: ";
-
-        // ID
-        oss << fmt::format("{:02X} ", id);
-
-        // Length LE
-        oss << fmt::format("{:02X} {:02X} ", length & 0xFF, (length >> 8) & 0xFF);
-
-        // Payload
-        for (auto b: payload) {
-            oss << fmt::format("{:02X} ", b);
+        for (size_t i = 0; i < payload.size(); ++i) {
+            oss << std::hex << std::setw(2) << std::setfill('0')
+                << static_cast<int>(payload[i]) << " ";
         }
 
         log->debug("{}", oss.str());

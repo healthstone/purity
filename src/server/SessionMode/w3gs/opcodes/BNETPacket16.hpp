@@ -21,16 +21,18 @@ public:
     std::vector<uint8_t> build_packet() const override {
         const auto& body = serialize();
 
-        // --- Сборка заголовка ---
         ByteBuffer header;
 
-        uint16_t opcode_le = htole16(static_cast<uint16_t>(get_opcode()));
-        uint16_t length_le = htole16(static_cast<uint16_t>(body.size()));
+        // Запись opcode и длины в Little-Endian напрямую
+        header.write_uint16_le(static_cast<uint16_t>(get_opcode()));
+        header.write_uint16_le(static_cast<uint16_t>(body.size()));
 
-        header.write_uint16(opcode_le);
-        header.write_uint16(length_le);
+        // Эффективное объединение данных
+        std::vector<uint8_t> full_packet;
+        full_packet.reserve(header.size() + body.size());  // Оптимизация: резервируем память
 
-        std::vector<uint8_t> full_packet = header.data();
+        const auto& header_data = header.data();
+        full_packet.insert(full_packet.end(), header_data.begin(), header_data.end());
         full_packet.insert(full_packet.end(), body.begin(), body.end());
 
         return full_packet;

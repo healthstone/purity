@@ -50,7 +50,7 @@ void HandlersBNCS::handle_sid_init(std::shared_ptr<ClientSession> session, BNETP
 }
 
 void HandlersBNCS::handle_sid_stopadv(std::shared_ptr<ClientSession> session, BNETPacket8 &p) {
-    uint32_t game_id = p.read_uint32(); // ID игры, которую нужно удалить
+    uint32_t game_id = p.read_uint32_be(); // ID игры, которую нужно удалить
     Logger::get()->debug("[handler] SID_STOPADV id: {}", game_id);
 }
 
@@ -61,66 +61,66 @@ void HandlersBNCS::handle_ping(std::shared_ptr<ClientSession> session, BNETPacke
 }
 
 void HandlersBNCS::handle_auth_info(std::shared_ptr<ClientSession> session, BNETPacket8 &p) {
-    Logger::get()->debug("[handler] SID_AUTH_INFO");
+    // Пропустить сигнатуру (4 байта)
+    p.skip(4);
 
-    uint32_t protocol = p.read_uint32(); //Версия BNCS протокола (часто 0)
+    uint32_t protocol = p.read_uint32_be();
 
-    /** ✅ Что такое archtag ?
-archtag (IX86 в Warcraft III) — это идентификатор платформы, на которой запущен клиент:
-Значение	Расшифровка
-IX86 (0x49583836)	Intel x86 архитектура (Windows PC)
-PMAC	PowerPC Macintosh
-X64	64-bit вариант (в классике нет)
+    uint32_t archtag_raw = p.read_uint32_le();  // LE !
+    std::string archtag;
+    archtag += static_cast<char>((archtag_raw >> 24) & 0xFF);
+    archtag += static_cast<char>((archtag_raw >> 16) & 0xFF);
+    archtag += static_cast<char>((archtag_raw >> 8) & 0xFF);
+    archtag += static_cast<char>(archtag_raw & 0xFF);
 
-🔑 PvPGN обычно проверяет archtag, чтобы убедиться, что клиент корректный (PC, Mac).
-Практически: на PvPGN для Warcraft III он почти всегда IX86.
+    uint32_t clienttag_raw = p.read_uint32_le();  // LE !
+    std::string clienttag;
+    clienttag += static_cast<char>((clienttag_raw >> 24) & 0xFF);
+    clienttag += static_cast<char>((clienttag_raw >> 16) & 0xFF);
+    clienttag += static_cast<char>((clienttag_raw >> 8) & 0xFF);
+    clienttag += static_cast<char>(clienttag_raw & 0xFF);
 
-👉 Влияет ли на логику?
-Прямо нет — это чисто информационное поле.
-Может влиять на выбор EXE hash или MPQ filename — например, на Mac клиент другой патч-файл.
-Сервер может использовать это, чтобы подставить другой checksum formula.**/
-    uint32_t archtag = p.read_uint32(); //Платформа (например IX86)
+    uint32_t versionid = p.read_uint32_le();  // LE !
+    uint32_t gamelang = p.read_uint32_be();
+    uint32_t localip = p.read_uint32_be();
+    int16_t timezone_bias = p.read_int16_le(); // LE ! <-- Timezone: только 2 байта!
 
-    /** Что такое clienttag ?
-clienttag — это продукт.
-Это ключевой тег, который определяет, с какой игрой работает клиент.
+    p.skip(2);  // <-- выравнивание! (padding)
+    uint32_t lcid = p.read_uint32_be();
+    uint32_t langid = p.read_uint32_be();
+    std::string langstr = p.read_string_raw(4);
+    std::string countrystr = p.read_string_raw(4);
 
-Значение	Расшифровка
-WAR3 (0x57415233)	Warcraft III: Reign of Chaos
-W3XP (0x57335850)	Warcraft III: The Frozen Throne
-D2DV	Diablo II Vanilla
-D2XP	Diablo II Expansion
-STAR	StarCraft
-SEXP	StarCraft: Brood War
-W2BN	Warcraft II BNE
-JSTR	Japanese StarCraft **/
-    uint32_t clienttag = p.read_uint32(); // Продукт (например WAR3 или W3XP)
-    uint32_t versionid = p.read_uint32(); // Версия exe-файла
-    uint32_t gamelang = p.read_uint32(); //	Язык игры
-    uint32_t localip = p.read_uint32(); // Локальный IP клиента
-    uint32_t timezone_bias = p.read_uint32(); // Смещение временной зоны
-    uint32_t lcid = p.read_uint32(); // Windows LCID
-    uint32_t langid = p.read_uint32(); // Windows LangID
+    p.debug_dump("SID_AUTH_INFO");
 
-    std::string langstr = p.read_string(); // Язык строкой ("enUS")
-    std::string countrystr = p.read_string(); // Название страны ("United States")
+    Logger::get()->debug(
+            "[handler] SID_AUTH_INFO:\n"
+            "  protocol=0x{:08X}\n"
+            "  archtag={}\n"
+            "  clienttag={}\n"
+            "  versionid=0x{:08X} ({})\n"
+            "  gamelang=0x{:08X}\n"
+            "  localip={}.{}.{}.{}\n"
+            "  timezone_bias={} minutes\n"
+            "  lcid=0x{:08X}\n"
+            "  langid=0x{:08X}\n"
+            "  langstr={}\n"
+            "  countrystr={}",
+            protocol,
+            archtag,
+            clienttag,
+            versionid, versionid,
+            gamelang,
+            (localip >> 24) & 0xFF, (localip >> 16) & 0xFF,
+            (localip >> 8) & 0xFF, localip & 0xFF,
+            timezone_bias,
+            lcid,
+            langid,
+            langstr,
+            countrystr
+    );
+}
 
-    session->setArchTag(archtag);
-    session->setClientTag(clienttag);
-    session->setVersionId(versionid);
-
-    // Генерируем токен для сессии
-    uint32_t server_token_ = static_cast<uint32_t>(std::rand());
-    session->setServerToken(server_token_);
-
-    BNETPacket8 reply(BNETOpcode8::SID_AUTH_CHECK);
-    reply.write_uint32(server_token_);
-    reply.write_uint32(0); // UDP value
-    reply.write_string("War3Patch.mpq");
-    reply.write_uint32(0); // value1
-    reply.write_uint32(0); // value2
-    reply.write_uint32(0); // value3
-    reply.write_uint32(0); // exe_info
-    reply.write_string("IX86Ver1.mpq"); // формула — для вида
-    PacketUtils::send_packet_as<BNETPacket8>(std::move(session), reply);
+void HandlersBNCS::handle_auth_check(std::shared_ptr<ClientSession> session, BNETPacket8 &p) {
+    Logger::get()->debug("[handler] SID_AUTH_CHECK");
 }

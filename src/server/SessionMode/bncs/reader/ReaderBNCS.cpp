@@ -24,13 +24,6 @@ void ReaderBNCS::process_read_buffer_as_bncs(std::shared_ptr<ClientSession> sess
 
         if (buffer.get_active_size() < W3_INIT_PACKET_SIZE) return;
 
-        // Проверка сигнатуры W3 (первые 4 байта после заголовка должны быть 0)
-        if (std::memcmp(data + 3, "\0\0\0\0", 4) != 0) {
-            log->warn("Invalid W3 auth packet signature");
-            session->close();
-            return;
-        }
-
         // Обрабатываем как SID_AUTH_INFO (0x50)
         auto body = std::vector<uint8_t>(data + 1, data + W3_INIT_PACKET_SIZE);
         buffer.read_completed(W3_INIT_PACKET_SIZE);

@@ -75,7 +75,7 @@ void Client::send_ping() {
 
 void Client::send_message(const std::string &msg) {
     BNETPacket8 packet(BNETOpcode8::SID_CHATCOMMAND);
-    packet.write_string(msg);
+    packet.write_string_nt(msg);
     send_packet(packet);
 }
 
