@@ -3,6 +3,14 @@
 #include <cstdint>
 
 enum class BNETOpcode8 : uint8_t {
+
+    //без длины
+    SID_AUTH_INFO                   = 0x50, // Информация для аутентификации
+    SID_AUTH_CHECK                  = 0x51, // Проверка аутентификации
+    SID_W3_LEAVECHAT = 0x1A,
+    SID_W3_GAMELIST = 0x30,
+
+    // обычные
     SID_NULL                        = 0x00, // Пустой пакет (подтверждение связи)
     SID_INIT                        = 0x01, // Пустой пакет (подтверждение связи)
     SID_STOPADV                     = 0x02, // Остановка рекламы игры
@@ -13,8 +21,6 @@ enum class BNETOpcode8 : uint8_t {
     SID_CHATEVENT                   = 0x0F, // Событие чата (сообщение)
     SID_CHECKAD                     = 0x15, // Проверка рекламы игры
     SID_PING                        = 0x25, // Проверка пинга
-    SID_AUTH_INFO                   = 0x50, // Информация для аутентификации
-    SID_AUTH_CHECK                  = 0x51, // Проверка аутентификации
     SID_AUTH_ACCOUNTLOGON           = 0x53, // Запрос на вход в аккаунт
     SID_AUTH_ACCOUNTLOGONPROOF      = 0x54, // Подтверждение входа
     SID_AUTH_ACCOUNTCREATE          = 0x52, // Создание аккаунта

@@ -16,6 +16,8 @@ public:
 
     void send_message(const std::string &msg);
 
+    void send_auth();
+
 private:
 
     void schedule_reconnect();

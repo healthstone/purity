@@ -79,6 +79,12 @@ void Client::send_message(const std::string &msg) {
     send_packet(packet);
 }
 
+void Client::send_auth() {
+//    BNETPacket8 packet(BNETOpcode8::SID_AUTH_INFO);
+//    packet.write_string(msg);
+//    send_packet(packet);
+}
+
 void Client::send_packet(const BNETPacket8 &packet) {
     std::vector<uint8_t> full_packet = packet.build_packet();
 
