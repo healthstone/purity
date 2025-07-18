@@ -120,7 +120,7 @@ void Client::flush_queue() {
 }
 
 void Client::start_receive_loop() {
-    auto header = std::make_shared<std::vector<uint8_t>>(3); // [ID][Length_LE]
+    auto header = std::make_shared<std::vector<uint8_t>>(3); // [ID][Length_BE]
 
     boost::asio::async_read(
             socket, boost::asio::buffer(*header),
@@ -139,16 +139,16 @@ void Client::start_receive_loop() {
                 }
 
                 uint8_t id = header->at(0);
-                uint16_t length_le = header->at(1) | (header->at(2) << 8);
+                uint16_t length_be = (header->at(1) << 8) | header->at(2);
 
-                if (length_le < 3) {
-                    log->error("[Client] Invalid length: {} (must be >= 3)", length_le);
+                if (length_be < 3) {
+                    log->error("[Client] Invalid length: {} (must be >= 3)", length_be);
                     connected = false;
                     schedule_reconnect();
                     return;
                 }
 
-                size_t payload_size = length_le - 3;
+                size_t payload_size = length_be - 3;
 
                 auto payload = std::make_shared<std::vector<uint8_t>>(payload_size);
 

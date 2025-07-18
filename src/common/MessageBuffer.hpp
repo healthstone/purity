@@ -20,8 +20,6 @@ public:
     void clear() {
         reset();
         _storage.clear();
-        // Можно зарезервировать обратно начальный размер:
-        _storage.shrink_to_fit();
     }
 
     uint8_t* base() { return _storage.data(); }

@@ -21,6 +21,15 @@ public:
     virtual std::vector<uint8_t> build_packet() const = 0;
     const std::vector<uint8_t>& serialize() const { return buffer_.data(); }
 
+    static void log_raw_payload(const std::vector<uint8_t>& payload, const std::string& prefix = "[Packet] RAW FULL DUMP:") {
+        std::ostringstream oss;
+        oss << prefix << " (" << payload.size() << " bytes): ";
+        for (uint8_t b : payload) {
+            oss << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(b) << " ";
+        }
+        Logger::get()->debug("{}", oss.str());
+    }
+
     // ==================== WRITE METHODS ====================
 
     // ---------- Big-Endian ----------
@@ -53,6 +62,19 @@ public:
     // ---------- Strings ----------
     void write_string_nt(const std::string& str) { buffer_.write_string_nt(str); }
     void write_string_raw(const std::string& str) { buffer_.write_string_raw(str); }
+
+    // ---------- Bytes ----------
+    std::vector<uint8_t> read_bytes(size_t length) {
+        return buffer_.read_bytes(length);
+    }
+
+    void write_bytes(const uint8_t* data, size_t length) {
+        buffer_.write_bytes(data, length);
+    }
+
+    void write_bytes(const std::vector<uint8_t>& data) {
+        buffer_.write_bytes(data);
+    }
 
     // ==================== READ METHODS ====================
 
@@ -91,18 +113,4 @@ public:
     void skip(size_t bytes) { buffer_.skip(bytes); }
     size_t read_pos() const { return buffer_.read_pos(); }
     size_t size() const { return buffer_.size(); }
-
-    virtual void debug_dump(const std::string& prefix = "[Packet]") const {
-        const auto& data = buffer_.data();
-
-        std::ostringstream oss;
-        oss << "[" << prefix << "] Dump (" << data.size() << ") bytes: ";
-
-        for (size_t i = 0; i < data.size(); ++i) {
-            oss << std::hex << std::setw(2) << std::setfill('0')
-                << static_cast<int>(data[i]) << " ";
-        }
-
-        Logger::get()->debug("{}", oss.str());
-    }
 };

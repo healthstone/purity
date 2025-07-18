@@ -49,6 +49,7 @@ target_include_directories(client PRIVATE
 add_executable(server
         src/main_server.cpp
         ${SERVER_SOURCES}
+        ${COMMON_SOURCES}
 )
 
 target_link_libraries(server PRIVATE
