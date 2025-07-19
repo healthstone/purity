@@ -66,5 +66,5 @@ private:
     SessionMode session_mode_ = SessionMode::BNCS;
 
     // PvPGN
-    std::unique_ptr<BNCSAccount> bncsAccount_;
+    std::shared_ptr<BNCSAccount> bncsAccount_;
 };

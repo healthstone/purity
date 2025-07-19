@@ -9,7 +9,7 @@ using boost::asio::ip::tcp;
 ClientSession::ClientSession(tcp::socket socket, std::shared_ptr<Server> server)
         : socket_(std::move(socket)), server_(std::move(server)), read_buffer_(4096) {
     // создаем класс с bncs аккаунтом
-    bncsAccount_ = std::make_unique<BNCSAccount>();
+    bncsAccount_ = std::make_shared<BNCSAccount>();
 }
 
 void ClientSession::start() {
