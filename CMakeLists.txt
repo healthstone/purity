@@ -78,6 +78,7 @@ target_link_libraries(tests PRIVATE
         Boost::boost Boost::system
         Catch2::Catch2WithMain
         OpenSSL::Crypto
+        spdlog::spdlog
         ${COMMON_SOURCES}  # Линкуем общие исходники
 )
 

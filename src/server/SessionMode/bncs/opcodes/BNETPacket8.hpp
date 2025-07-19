@@ -11,8 +11,8 @@ public:
 
     BNETOpcode8 get_id() const { return id_; }
 
-    static BNETPacket8 deserialize(const std::vector<uint8_t> &payload, BNETOpcode8 id) {
-        log_raw_payload(payload, "[BNETPacket8::deserialize] RAW FULL DUMP:");
+    static BNETPacket8 deserialize(BNETOpcode8 id, const std::vector<uint8_t> &payload) {
+        log_raw_payload(id, payload, "[BNETPacket8::deserialize]");
 
         BNETPacket8 p(id);
         p.buffer_ = ByteBuffer(payload);
@@ -35,7 +35,7 @@ public:
         full_packet.insert(full_packet.end(), header_data.begin(), header_data.end());
         full_packet.insert(full_packet.end(), body.begin(), body.end());
 
-        log_raw_payload(full_packet, "[BNETPacket8::build_packet] RAW FULL DUMP:");
+        log_raw_payload(get_id(), body, "[BNETPacket8::build_packet]");
         return full_packet;
     }
 

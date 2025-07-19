@@ -120,7 +120,7 @@ void Client::flush_queue() {
 }
 
 void Client::start_receive_loop() {
-    auto header = std::make_shared<std::vector<uint8_t>>(3); // [ID][Length_BE]
+    auto header = std::make_shared<std::vector<uint8_t>>(3); // [ID][LEN_BE]
 
     boost::asio::async_read(
             socket, boost::asio::buffer(*header),
@@ -138,17 +138,30 @@ void Client::start_receive_loop() {
                     return;
                 }
 
-                uint8_t id = header->at(0);
-                uint16_t length_be = (header->at(1) << 8) | header->at(2);
+                uint8_t id = (*header)[0];
+                uint16_t payload_size = (static_cast<uint16_t>((*header)[1]) << 8) | (*header)[2];
 
-                if (length_be < 3) {
-                    log->error("[Client] Invalid length: {} (must be >= 3)", length_be);
+                if (payload_size > 2048) {
+                    log->error("[Client] Invalid payload size: {} (too large)", payload_size);
                     connected = false;
                     schedule_reconnect();
                     return;
                 }
 
-                size_t payload_size = length_be - 3;
+                if (payload_size == 0) {
+                    //log->warn("[Client] Received zero-length payload, opcode: 0x{:02X}", id);
+                    try {
+                        // Всё ещё обрабатываем пустой пакет как валидный
+                        BNETOpcode8 opcode = static_cast<BNETOpcode8>(id);
+                        BNETPacket8 p = BNETPacket8::deserialize(opcode, {});
+                        handle_packet(p);
+                    } catch (const std::exception& ex) {
+                        log->error("[Client] Failed to parse empty packet: {}", ex.what());
+                    }
+
+                    start_receive_loop();
+                    return;
+                }
 
                 auto payload = std::make_shared<std::vector<uint8_t>>(payload_size);
 
@@ -170,16 +183,18 @@ void Client::start_receive_loop() {
 
                             try {
                                 BNETOpcode8 opcode = static_cast<BNETOpcode8>(id);
-                                BNETPacket8 p = BNETPacket8::deserialize(*payload, opcode);
+                                BNETPacket8 p = BNETPacket8::deserialize(opcode, *payload);
                                 handle_packet(p);
                             } catch (const std::exception& ex) {
                                 log->error("[Client] Failed to parse packet: {}", ex.what());
                             }
 
-                            // Start next read
+                            // Старт следующего чтения
                             start_receive_loop();
-                        });
-            });
+                        }
+                );
+            }
+    );
 }
 
 

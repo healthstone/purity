@@ -51,23 +51,24 @@ void ReaderBNCS::process_read_buffer_as_bncs(std::shared_ptr<ClientSession> sess
     }
 
     // Обработка пакетов с переменной длиной (стандартные BNCS)
+    // [ID][LEN_BE][PAYLOAD]
     if (buffer.get_active_size() < 3) return;
 
-    const uint16_t length = (static_cast<uint16_t>(data[1]) << 8 | static_cast<uint16_t>(data[2]));
+    const uint8_t id = data[0];
+    const uint16_t payload_size = (data[1] << 8) | data[2];
 
-    // Валидация длины пакета
-    if (length < 3 || length > 2048) {
-        log->error("Invalid packet length: {} (header: {:02X} {:02X} {:02X})",
-                   length, data[0], data[1], data[2]);
+    if (payload_size > 2048) {
+        log->error("Payload too big: {}", payload_size);
         session->close();
         return;
     }
 
-    if (buffer.get_active_size() < length) return;
+    if (buffer.get_active_size() < 3 + payload_size) return;
 
-    auto body = std::vector<uint8_t>(data + 3, data + length);
-    buffer.read_completed(length);
-    process_valid_packet(session, static_cast<BNETOpcode8>(opcode), body);
+    auto body = std::vector<uint8_t>(data + 3, data + 3 + payload_size);
+    buffer.read_completed(3 + payload_size);
+
+    process_valid_packet(session, static_cast<BNETOpcode8>(id), body);
 }
 
 void ReaderBNCS::process_valid_packet(std::shared_ptr<ClientSession> session,
@@ -75,7 +76,7 @@ void ReaderBNCS::process_valid_packet(std::shared_ptr<ClientSession> session,
                                       const std::vector<uint8_t>& body) {
     auto log = Logger::get();
     try {
-        auto packet = BNETPacket8::deserialize(body, opcode);
+        auto packet = BNETPacket8::deserialize(opcode, body);
         HandlersBNCS::dispatch(session, packet);
     } catch (const std::exception& ex) {
         log->error("Packet processing failed: {}", ex.what());

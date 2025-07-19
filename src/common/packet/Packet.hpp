@@ -8,6 +8,7 @@
 #include <sstream>
 #include "ByteBuffer.hpp"
 #include "Logger.hpp"
+#include "src/server/SessionMode/bncs/opcodes/opcodes8.hpp"
 
 class Packet {
 protected:
@@ -21,9 +22,9 @@ public:
     virtual std::vector<uint8_t> build_packet() const = 0;
     const std::vector<uint8_t>& serialize() const { return buffer_.data(); }
 
-    static void log_raw_payload(const std::vector<uint8_t>& payload, const std::string& prefix = "[Packet] RAW FULL DUMP:") {
+    static void log_raw_payload(BNETOpcode8 id, const std::vector<uint8_t>& payload, const std::string& prefix = "[Packet] RAW FULL DUMP") {
         std::ostringstream oss;
-        oss << prefix << " (" << payload.size() << " bytes): ";
+        oss << prefix << " opcode ID: " << std::to_string(static_cast<uint8_t>(id)) << " (" << payload.size() << " bytes) Payload: ";
         for (uint8_t b : payload) {
             oss << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(b) << " ";
         }
