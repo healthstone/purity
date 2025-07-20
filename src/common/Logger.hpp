@@ -36,7 +36,7 @@ private:
     std::unordered_map<std::string, std::string> data_;
 };
 
-class Logger {
+class Logger : public std::enable_shared_from_this<Logger> {
 public:
     static void init_thread_pool() {
         constexpr size_t queue_size = 8192;
@@ -44,118 +44,69 @@ public:
         spdlog::init_thread_pool(queue_size, num_threads);
     }
 
-    static std::shared_ptr<spdlog::logger> get() {
-        static std::shared_ptr<spdlog::logger> logger = create_logger();
-        return logger;
+    static std::shared_ptr<Logger> get() {
+        static std::shared_ptr<Logger> instance = std::shared_ptr<Logger>(new Logger());
+        return instance;
     }
 
-    // ---------- MDC wrappers ----------
-    static void trace_with_mdc(const std::string& message, const MDC& mdc) {
-        get()->trace("{}", format_with_mdc(message, mdc));
+    // --- MDC wrappers ---
+    void trace_with_mdc(const std::string& message, const MDC& mdc) {
+        logger_->trace("{}", format_with_mdc(message, mdc));
     }
 
-    static void debug_with_mdc(const std::string& message, const MDC& mdc) {
-        get()->debug("{}", format_with_mdc(message, mdc));
+    void debug_with_mdc(const std::string& message, const MDC& mdc) {
+        logger_->debug("{}", format_with_mdc(message, mdc));
     }
 
-    static void info_with_mdc(const std::string& message, const MDC& mdc) {
-        get()->info("{}", format_with_mdc(message, mdc));
+    void info_with_mdc(const std::string& message, const MDC& mdc) {
+        logger_->info("{}", format_with_mdc(message, mdc));
     }
 
-    static void warn_with_mdc(const std::string& message, const MDC& mdc) {
-        get()->warn("{}", format_with_mdc(message, mdc));
+    void warn_with_mdc(const std::string& message, const MDC& mdc) {
+        logger_->warn("{}", format_with_mdc(message, mdc));
     }
 
-    static void error_with_mdc(const std::string& message, const MDC& mdc) {
-        get()->error("{}", format_with_mdc(message, mdc));
+    void error_with_mdc(const std::string& message, const MDC& mdc) {
+        logger_->error("{}", format_with_mdc(message, mdc));
     }
 
-    static void critical_with_mdc(const std::string& message, const MDC& mdc) {
-        get()->critical("{}", format_with_mdc(message, mdc));
+    void critical_with_mdc(const std::string& message, const MDC& mdc) {
+        logger_->critical("{}", format_with_mdc(message, mdc));
     }
 
-    // --- Regular log methods forwarding to spdlog with JSON output ---
+    // --- Regular log methods with fmt::format_string ---
     template<typename... Args>
-    static void trace(const char* fmt, const Args&... args) {
-        log_json(spdlog::level::trace, fmt, args...);
+    void trace(fmt::format_string<Args...> fmt, Args&&... args) {
+        log_json(spdlog::level::trace, fmt, std::forward<Args>(args)...);
     }
+
     template<typename... Args>
-    static void debug(const char* fmt, const Args&... args) {
-        log_json(spdlog::level::debug, fmt, args...);
+    void debug(fmt::format_string<Args...> fmt, Args&&... args) {
+        log_json(spdlog::level::debug, fmt, std::forward<Args>(args)...);
     }
+
     template<typename... Args>
-    static void info(const char* fmt, const Args&... args) {
-        log_json(spdlog::level::info, fmt, args...);
+    void info(fmt::format_string<Args...> fmt, Args&&... args) {
+        log_json(spdlog::level::info, fmt, std::forward<Args>(args)...);
     }
+
     template<typename... Args>
-    static void warn(const char* fmt, const Args&... args) {
-        log_json(spdlog::level::warn, fmt, args...);
+    void warn(fmt::format_string<Args...> fmt, Args&&... args) {
+        log_json(spdlog::level::warn, fmt, std::forward<Args>(args)...);
     }
+
     template<typename... Args>
-    static void error(const char* fmt, const Args&... args) {
-        log_json(spdlog::level::err, fmt, args...);
+    void error(fmt::format_string<Args...> fmt, Args&&... args) {
+        log_json(spdlog::level::err, fmt, std::forward<Args>(args)...);
     }
+
     template<typename... Args>
-    static void critical(const char* fmt, const Args&... args) {
-        log_json(spdlog::level::critical, fmt, args...);
+    void critical(fmt::format_string<Args...> fmt, Args&&... args) {
+        log_json(spdlog::level::critical, fmt, std::forward<Args>(args)...);
     }
 
 private:
-    static std::string format_with_mdc(const std::string& message, const MDC& mdc) {
-        std::ostringstream oss;
-        oss << "\"message\":\"" << escape(message) << "\",\"mdc\":" << mdc_to_json(mdc);
-        return oss.str();
-    }
-
-    template<typename... Args>
-    static void log_json(spdlog::level::level_enum lvl, const char* fmt_str, const Args&... args) {
-        std::string message = fmt::format(fmt_str, args...);
-        std::ostringstream oss;
-        oss << "\"message\":\"" << escape(message) << "\"";
-        get()->log(lvl, "{}", oss.str());
-    }
-
-    // JSON форматтер без цвета (консоль и файл)
-    class JsonFormatter : public spdlog::formatter {
-    public:
-        void format(const spdlog::details::log_msg& msg, spdlog::memory_buf_t& dest) override {
-            using namespace std::chrono;
-
-            auto tp = msg.time;
-            auto s = time_point_cast<seconds>(tp);
-            auto ms = time_point_cast<milliseconds>(tp) - time_point_cast<milliseconds>(s);
-            auto ns = time_point_cast<nanoseconds>(tp) - time_point_cast<nanoseconds>(time_point_cast<milliseconds>(tp));
-
-            auto time_t = system_clock::to_time_t(s);
-            std::tm tm;
-#ifdef _WIN32
-            localtime_s(&tm, &time_t);
-#else
-            localtime_r(&time_t, &tm);
-#endif
-
-            char time_buf[64];
-            std::strftime(time_buf, sizeof(time_buf), "%Y-%m-%dT%H:%M:%S", &tm);
-
-            // Здесь msg.payload уже содержит JSON без внешних скобок, вставляем "как есть"
-            fmt::format_to(
-                    std::back_inserter(dest),
-                    "{{\"timestamp\":\"{}.{:03}{:03}\",\"level\":\"{}\",\"thread_id\":{},{} }}\n",
-                    time_buf,
-                    static_cast<int>(ms.count()),
-                    static_cast<int>(ns.count()),
-                    spdlog::level::to_string_view(msg.level),
-                    msg.thread_id,
-                    fmt::string_view(msg.payload.data(), msg.payload.size())
-            );
-        }
-
-        std::unique_ptr<spdlog::formatter> clone() const override {
-            return std::make_unique<JsonFormatter>();
-        }
-    };
-
-    static std::shared_ptr<spdlog::logger> create_logger() {
+    Logger() {
         try {
             // НЕ цветной консольный sink
             auto console_sink = std::make_shared<spdlog::sinks::stdout_sink_mt>();
@@ -182,7 +133,7 @@ private:
                 sinks.push_back(file_sink);
             }
 
-            auto logger = std::make_shared<spdlog::async_logger>(
+            logger_ = std::make_shared<spdlog::async_logger>(
                     "async_logger",
                     sinks.begin(),
                     sinks.end(),
@@ -190,16 +141,28 @@ private:
                     spdlog::async_overflow_policy::block
             );
 
-            logger->set_level(spdlog::level::debug);
-            spdlog::register_logger(logger);
-            spdlog::set_default_logger(logger);
-
-            return logger;
+            logger_->set_level(spdlog::level::debug);
+            spdlog::register_logger(logger_);
+            spdlog::set_default_logger(logger_);
 
         } catch (const spdlog::spdlog_ex& ex) {
             std::cerr << "Logger init failed: " << ex.what() << std::endl;
             throw;
         }
+    }
+
+    template<typename... Args>
+    void log_json(spdlog::level::level_enum lvl, fmt::format_string<Args...> fmt_str, Args&&... args) {
+        std::string message = fmt::format(fmt_str, std::forward<Args>(args)...);
+        std::ostringstream oss;
+        oss << "\"message\":\"" << escape(message) << "\"";
+        logger_->log(lvl, "{}", oss.str());
+    }
+
+    std::string format_with_mdc(const std::string& message, const MDC& mdc) {
+        std::ostringstream oss;
+        oss << "\"message\":\"" << escape(message) << "\",\"mdc\":" << mdc_to_json(mdc);
+        return oss.str();
     }
 
     static std::string mdc_to_json(const MDC& mdc) {
@@ -224,4 +187,47 @@ private:
         }
         return out;
     }
+
+    // JSON форматтер без цвета (консоль и файл)
+    class JsonFormatter : public spdlog::formatter {
+    public:
+        void format(const spdlog::details::log_msg& msg, spdlog::memory_buf_t& dest) override {
+            using namespace std::chrono;
+
+            auto tp = msg.time;
+            auto s = time_point_cast<seconds>(tp);
+            auto ms = time_point_cast<milliseconds>(tp) - time_point_cast<milliseconds>(s);
+            auto ns = time_point_cast<nanoseconds>(tp) - time_point_cast<nanoseconds>(time_point_cast<milliseconds>(tp));
+
+            auto time_t = system_clock::to_time_t(s);
+            std::tm tm;
+#ifdef _WIN32
+            localtime_s(&tm, &time_t);
+#else
+            localtime_r(&time_t, &tm);
+#endif
+
+            char time_buf[64];
+            std::strftime(time_buf, sizeof(time_buf), "%Y-%m-%dT%H:%M:%S", &tm);
+
+            // msg.payload уже содержит JSON без внешних скобок, вставляем "как есть"
+            fmt::format_to(
+                    std::back_inserter(dest),
+                    "{{\"timestamp\":\"{}.{:03}{:03}\",\"level\":\"{}\",\"thread_id\":{},{} }}\n",
+                    time_buf,
+                    static_cast<int>(ms.count()),
+                    static_cast<int>(ns.count()),
+                    spdlog::level::to_string_view(msg.level),
+                    msg.thread_id,
+                    fmt::string_view(msg.payload.data(), msg.payload.size())
+            );
+        }
+
+        std::unique_ptr<spdlog::formatter> clone() const override {
+            return std::make_unique<JsonFormatter>();
+        }
+    };
+
+private:
+    std::shared_ptr<spdlog::logger> logger_;
 };

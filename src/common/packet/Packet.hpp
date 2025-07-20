@@ -30,7 +30,7 @@ public:
         }
         MDC mdc;
         mdc.put("opcode", std::to_string(static_cast<uint8_t>(id)));
-        Logger::debug_with_mdc(oss.str(), mdc);
+        Logger::get()->debug_with_mdc(oss.str(), mdc);
     }
 
     // ==================== WRITE METHODS ====================
