@@ -28,7 +28,9 @@ public:
         for (uint8_t b : payload) {
             oss << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(b) << " ";
         }
-        Logger::get()->debug("{}", oss.str());
+        MDC mdc;
+        mdc.put("opcode", std::to_string(static_cast<uint8_t>(id)));
+        Logger::debug_with_mdc(oss.str(), mdc);
     }
 
     // ==================== WRITE METHODS ====================
