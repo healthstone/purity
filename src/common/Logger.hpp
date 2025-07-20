@@ -17,12 +17,15 @@
 #include <spdlog/async.h>
 #include <spdlog/async_logger.h>
 #include <fmt/format.h>
-#include "spdlog/sinks/stdout_sinks.h"
 
 class MDC {
 public:
     void put(const std::string& key, const std::string& value) {
         data_[key] = value;
+    }
+
+    void clear() {
+        data_.clear();
     }
 
     [[nodiscard]] const std::unordered_map<std::string, std::string>& data() const {
@@ -48,30 +51,70 @@ public:
 
     // ---------- MDC wrappers ----------
     static void trace_with_mdc(const std::string& message, const MDC& mdc) {
-        get()->trace(R"({{"msg":"{}","mdc":{}}})", escape(message), mdc_to_json(mdc));
+        get()->trace("{}", format_with_mdc(message, mdc));
     }
 
     static void debug_with_mdc(const std::string& message, const MDC& mdc) {
-        get()->debug(R"({{"msg":"{}","mdc":{}}})", escape(message), mdc_to_json(mdc));
+        get()->debug("{}", format_with_mdc(message, mdc));
     }
 
     static void info_with_mdc(const std::string& message, const MDC& mdc) {
-        get()->info(R"({{"msg":"{}","mdc":{}}})", escape(message), mdc_to_json(mdc));
+        get()->info("{}", format_with_mdc(message, mdc));
     }
 
     static void warn_with_mdc(const std::string& message, const MDC& mdc) {
-        get()->warn(R"({{"msg":"{}","mdc":{}}})", escape(message), mdc_to_json(mdc));
+        get()->warn("{}", format_with_mdc(message, mdc));
     }
 
     static void error_with_mdc(const std::string& message, const MDC& mdc) {
-        get()->error(R"({{"msg":"{}","mdc":{}}})", escape(message), mdc_to_json(mdc));
+        get()->error("{}", format_with_mdc(message, mdc));
     }
 
     static void critical_with_mdc(const std::string& message, const MDC& mdc) {
-        get()->critical(R"({{"msg":"{}","mdc":{}}})", escape(message), mdc_to_json(mdc));
+        get()->critical("{}", format_with_mdc(message, mdc));
+    }
+
+    // --- Regular log methods forwarding to spdlog with JSON output ---
+    template<typename... Args>
+    static void trace(const char* fmt, const Args&... args) {
+        log_json(spdlog::level::trace, fmt, args...);
+    }
+    template<typename... Args>
+    static void debug(const char* fmt, const Args&... args) {
+        log_json(spdlog::level::debug, fmt, args...);
+    }
+    template<typename... Args>
+    static void info(const char* fmt, const Args&... args) {
+        log_json(spdlog::level::info, fmt, args...);
+    }
+    template<typename... Args>
+    static void warn(const char* fmt, const Args&... args) {
+        log_json(spdlog::level::warn, fmt, args...);
+    }
+    template<typename... Args>
+    static void error(const char* fmt, const Args&... args) {
+        log_json(spdlog::level::err, fmt, args...);
+    }
+    template<typename... Args>
+    static void critical(const char* fmt, const Args&... args) {
+        log_json(spdlog::level::critical, fmt, args...);
     }
 
 private:
+    static std::string format_with_mdc(const std::string& message, const MDC& mdc) {
+        std::ostringstream oss;
+        oss << "\"message\":\"" << escape(message) << "\",\"mdc\":" << mdc_to_json(mdc);
+        return oss.str();
+    }
+
+    template<typename... Args>
+    static void log_json(spdlog::level::level_enum lvl, const char* fmt_str, const Args&... args) {
+        std::string message = fmt::format(fmt_str, args...);
+        std::ostringstream oss;
+        oss << "\"message\":\"" << escape(message) << "\"";
+        get()->log(lvl, "{}", oss.str());
+    }
+
     // JSON форматтер без цвета (консоль и файл)
     class JsonFormatter : public spdlog::formatter {
     public:
@@ -94,9 +137,10 @@ private:
             char time_buf[64];
             std::strftime(time_buf, sizeof(time_buf), "%Y-%m-%dT%H:%M:%S", &tm);
 
+            // Здесь msg.payload уже содержит JSON без внешних скобок, вставляем "как есть"
             fmt::format_to(
                     std::back_inserter(dest),
-                    "{{\"timestamp\":\"{}.{:03}{:03}\",\"level\":\"{}\",\"thread_id\":{},\"message\":{}}}\n",
+                    "{{\"timestamp\":\"{}.{:03}{:03}\",\"level\":\"{}\",\"thread_id\":{},{} }}\n",
                     time_buf,
                     static_cast<int>(ms.count()),
                     static_cast<int>(ns.count()),
