@@ -12,11 +12,12 @@
 #include <sstream>
 
 #include <spdlog/spdlog.h>
-#include <spdlog/sinks/stdout_color_sinks.h>
+#include <spdlog/sinks/stdout_sinks.h>           // НЕ цветной консольный sink
 #include <spdlog/sinks/rotating_file_sink.h>
 #include <spdlog/async.h>
 #include <spdlog/async_logger.h>
 #include <fmt/format.h>
+#include "spdlog/sinks/stdout_sinks.h"
 
 class MDC {
 public:
@@ -71,7 +72,7 @@ public:
     }
 
 private:
-    // JSON форматтер без цвета (файл)
+    // JSON форматтер без цвета (консоль и файл)
     class JsonFormatter : public spdlog::formatter {
     public:
         void format(const spdlog::details::log_msg& msg, spdlog::memory_buf_t& dest) override {
@@ -110,69 +111,12 @@ private:
         }
     };
 
-    // JSON форматтер с цветным уровнем (консоль)
-    class ColoredJsonFormatter : public spdlog::formatter {
-    public:
-        void format(const spdlog::details::log_msg& msg, spdlog::memory_buf_t& dest) override {
-            using namespace std::chrono;
-
-            auto tp = msg.time;
-            auto s = time_point_cast<seconds>(tp);
-            auto ms = time_point_cast<milliseconds>(tp) - time_point_cast<milliseconds>(s);
-            auto ns = time_point_cast<nanoseconds>(tp) - time_point_cast<nanoseconds>(time_point_cast<milliseconds>(tp));
-
-            auto time_t = system_clock::to_time_t(s);
-            std::tm tm;
-#ifdef _WIN32
-            localtime_s(&tm, &time_t);
-#else
-            localtime_r(&time_t, &tm);
-#endif
-
-            char time_buf[64];
-            std::strftime(time_buf, sizeof(time_buf), "%Y-%m-%dT%H:%M:%S", &tm);
-
-            auto level_str = spdlog::level::to_string_view(msg.level);
-
-            fmt::format_to(
-                    std::back_inserter(dest),
-                    "{{\"timestamp\":\"{}.{:03}{:03}\",\"level\":\"{}{}{}\",\"thread_id\":{},\"message\":{}}}\n",
-                    time_buf,
-                    static_cast<int>(ms.count()),
-                    static_cast<int>(ns.count()),
-                    color_start(msg.level),
-                    level_str,
-                    color_end(),
-                    msg.thread_id,
-                    fmt::string_view(msg.payload.data(), msg.payload.size())
-            );
-        }
-
-        std::unique_ptr<spdlog::formatter> clone() const override {
-            return std::make_unique<ColoredJsonFormatter>();
-        }
-
-    private:
-        static const char* color_start(spdlog::level::level_enum lvl) {
-            switch (lvl) {
-                case spdlog::level::trace:    return "\033[37m";
-                case spdlog::level::debug:    return "\033[36m";
-                case spdlog::level::info:     return "\033[32m";
-                case spdlog::level::warn:     return "\033[33m";
-                case spdlog::level::err:      return "\033[31m";
-                case spdlog::level::critical: return "\033[41m";
-                default:                      return "";
-            }
-        }
-
-        static const char* color_end() { return "\033[0m"; }
-    };
-
     static std::shared_ptr<spdlog::logger> create_logger() {
         try {
-            auto console_sink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
+            // НЕ цветной консольный sink
+            auto console_sink = std::make_shared<spdlog::sinks::stdout_sink_mt>();
             console_sink->set_level(spdlog::level::debug);
-            console_sink->set_formatter(std::make_unique<ColoredJsonFormatter>());
+            console_sink->set_formatter(std::make_unique<JsonFormatter>());
 
             std::vector<spdlog::sink_ptr> sinks{ console_sink };
 
