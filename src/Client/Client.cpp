@@ -78,7 +78,30 @@ void Client::send_ping() {
 
 void Client::handle_logon_challenge() {
     AuthPacket packet(AuthOpcode::AUTH_CMSG_LOGON_CHALLENGE);
-    packet.write_string_nt("Test_user");
+
+    //// Пример чтения в порядке протокола
+    //        uint8_t cmd = p.read_uint8_be();             // 0x00
+    //        uint8_t error = p.read_uint8_be();           // 0x01
+    //        uint16_t size = p.read_uint16_be();          // 0x02
+    //
+    //        std::string gamename = p.read_string_raw(4); // 0x04
+    //
+    //        uint8_t version1 = p.read_uint8_be();        // 0x08
+    //        uint8_t version2 = p.read_uint8_be();        // 0x09
+    //        uint8_t version3 = p.read_uint8_be();        // 0x0A
+    //
+    //        uint16_t build = p.read_uint16_be();         // 0x0B
+    //
+    //        std::string platform = p.read_string_raw(4); // 0x0D
+    //        std::string os = p.read_string_raw(4);       // 0x11
+    //        std::string country = p.read_string_raw(4);  // 0x15
+    //
+    //        uint32_t timezone = p.read_uint32_le();             // 0x19 (LE)
+    //        uint32_t ip = p.read_uint32_le();                   // 0x1D (LE)
+    //
+    //        uint8_t name_len = p.read_uint8_be();               // 0x21
+    //        std::string username = p.read_string_raw(name_len); // 0x22
+    packet.write_string_nt_le("Test_user");
     send_packet(packet);
     Logger::get()->debug("[Client] Sent AUTH_CMSG_LOGON_CHALLENGE");
 }
@@ -203,20 +226,20 @@ void Client::start_receive_loop() {
 void Client::handle_packet(AuthPacket &p) {
     auto log = Logger::get();
 
-    switch (p.get_id()) {
+    switch (p.cmd()) {
         case AuthOpcode::AUTH_SMSG_PONG:
             log->debug("[Client] Received AUTH_SMSG_PONG");
             break;
 
         case AuthOpcode::AUTH_SMSG_LOGON_CHALLENGE: {
-            std::string salt = p.read_string_nt();
-            std::string public_b = p.read_string_nt();
+            std::string salt = p.read_string_nt_le();
+            std::string public_b = p.read_string_nt_le();
             log->debug("[Client] Received AUTH_SMSG_LOGON_CHALLENGE: salt={}, public_B={}", salt, public_b);
             break;
         }
 
         default:
-            log->warn("[Client] Unknown opcode: {}", static_cast<uint8_t>(p.get_id()));
+            log->warn("[Client] Unknown opcode: {}", static_cast<uint8_t>(p.cmd()));
             break;
     }
 }

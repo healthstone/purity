@@ -26,14 +26,12 @@ public:
             const std::vector<uint8_t>& payload,
             const std::string& prefix = "[Packet] RAW DUMP")
     {
-        // Формируем hex-дамп для payload (короткий/основной)
         std::string hex_dump;
         hex_dump.reserve(payload.size() * 3);
         for (uint8_t b : payload) {
             fmt::format_to(std::back_inserter(hex_dump), "{:02X} ", b);
         }
 
-        // Логируем краткий основной дамп
         std::string log_message = fmt::format("{} opcode ID: {} ({} bytes) Payload: {}",
                                               prefix,
                                               opcode,
@@ -46,10 +44,10 @@ public:
     }
 
     // ==================== WRITE METHODS ====================
+    void write_uint8(uint8_t value) { buffer_.write_uint8(value); }
+    void write_int8(int8_t value) { buffer_.write_int8(value); }
 
     // ---------- Big-Endian ----------
-    void write_uint8_be(uint8_t value) { buffer_.write_uint8_be(value); }
-    void write_int8_be(int8_t value) { buffer_.write_int8_be(value); }
     void write_uint16_be(uint16_t value) { buffer_.write_uint16_be(value); }
     void write_int16_be(int16_t value) { buffer_.write_int16_be(value); }
     void write_uint32_be(uint32_t value) { buffer_.write_uint32_be(value); }
@@ -60,8 +58,6 @@ public:
     void write_double_be(double value) { buffer_.write_double_be(value); }
 
     // ---------- Little-Endian ----------
-    void write_uint8_le(uint8_t value) { buffer_.write_uint8_le(value); }
-    void write_int8_le(int8_t value) { buffer_.write_int8_le(value); }
     void write_uint16_le(uint16_t value) { buffer_.write_uint16_le(value); }
     void write_int16_le(int16_t value) { buffer_.write_int16_le(value); }
     void write_uint32_le(uint32_t value) { buffer_.write_uint32_le(value); }
@@ -75,27 +71,27 @@ public:
     void write_bool(bool value) { buffer_.write_bool(value); }
 
     // ---------- Strings ----------
-    void write_string_nt(const std::string& str) { buffer_.write_string_nt(str); }
-    void write_string_raw(const std::string& str) { buffer_.write_string_raw(str); }
+
+    // BE raw string (без нуль-терминатора)
+    void write_string_raw_be(const std::string& str) { buffer_.write_string_raw_be(str); }
+    // LE raw string (реверс)
+    void write_string_raw_le(const std::string& str) { buffer_.write_string_raw_le(str); }
+
+    // BE null-terminated string
+    void write_string_nt_be(const std::string& str) { buffer_.write_string_nt_be(str); }
+    // LE null-terminated string (реверс + '\0')
+    void write_string_nt_le(const std::string& str) { buffer_.write_string_nt_le(str); }
 
     // ---------- Bytes ----------
-    std::vector<uint8_t> read_bytes(size_t length) {
-        return buffer_.read_bytes(length);
-    }
-
-    void write_bytes(const uint8_t* data, size_t length) {
-        buffer_.write_bytes(data, length);
-    }
-
-    void write_bytes(const std::vector<uint8_t>& data) {
-        buffer_.write_bytes(data);
-    }
+    std::vector<uint8_t> read_bytes(size_t length) { return buffer_.read_bytes(length); }
+    void write_bytes(const uint8_t* data, size_t length) { buffer_.write_bytes(data, length); }
+    void write_bytes(const std::vector<uint8_t>& data) { buffer_.write_bytes(data); }
 
     // ==================== READ METHODS ====================
+    uint8_t read_uint8() { return buffer_.read_uint8(); }
+    int8_t read_int8() { return buffer_.read_int8(); }
 
     // ---------- Big-Endian ----------
-    uint8_t read_uint8_be() { return buffer_.read_uint8_be(); }
-    int8_t read_int8_be() { return buffer_.read_int8_be(); }
     uint16_t read_uint16_be() { return buffer_.read_uint16_be(); }
     int16_t read_int16_be() { return buffer_.read_int16_be(); }
     uint32_t read_uint32_be() { return buffer_.read_uint32_be(); }
@@ -106,8 +102,6 @@ public:
     double read_double_be() { return buffer_.read_double_be(); }
 
     // ---------- Little-Endian ----------
-    uint8_t read_uint8_le() { return buffer_.read_uint8_le(); }
-    int8_t read_int8_le() { return buffer_.read_int8_le(); }
     uint16_t read_uint16_le() { return buffer_.read_uint16_le(); }
     int16_t read_int16_le() { return buffer_.read_int16_le(); }
     uint32_t read_uint32_le() { return buffer_.read_uint32_le(); }
@@ -121,8 +115,16 @@ public:
     bool read_bool() { return buffer_.read_bool(); }
 
     // ---------- Strings ----------
-    std::string read_string_nt() { return buffer_.read_string_nt(); }
-    std::string read_string_raw(size_t length) { return buffer_.read_string_raw(length); }
+
+    // BE raw string (без нуль-терминатора)
+    std::string read_string_raw_be(size_t length) { return buffer_.read_string_raw_be(length); }
+    // LE raw string (реверс)
+    std::string read_string_raw_le(size_t length) { return buffer_.read_string_raw_le(length); }
+
+    // BE null-terminated string
+    std::string read_string_nt_be() { return buffer_.read_string_nt_be(); }
+    // LE null-terminated string (реверс)
+    std::string read_string_nt_le() { return buffer_.read_string_nt_le(); }
 
     // ==================== UTILITY METHODS ====================
     void skip(size_t bytes) { buffer_.skip(bytes); }

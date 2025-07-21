@@ -6,54 +6,43 @@ using namespace ReaderAuthSession;
 
 void ReaderAuthSession::process_read_buffer_as_authserver(std::shared_ptr<ClientSession> session) {
     auto log = Logger::get();
-    auto& buffer = session->read_buffer();
+    MessageBuffer& buffer = session->read_buffer();
 
-    // Минимальный размер для проверки: 2 байта длины + 1 байт opcode
-    if (buffer.get_active_size() < 3) return;
+    // Проверяем, что в буфере минимум 4 байта заголовка (cmd(1) + error(1) + size(2))
+    if (buffer.get_active_size() < 4)
+        return;
 
     const uint8_t* data = buffer.read_ptr();
 
-    // Считаем длину пакета (Length LE - 2 байта)
-    uint16_t packet_length = data[0] | (data[1] << 8);
+    // Читаем заголовок (cmd, error, size LE)
+    uint8_t cmd = data[0];
+    uint8_t error = data[1];
+    uint16_t size = static_cast<uint16_t>(data[2]) | (static_cast<uint16_t>(data[3]) << 8);
 
-    // Проверяем, что полный пакет в буфере
-    if (buffer.get_active_size() < 2 + packet_length) return;
+    // Проверяем, что весь пакет целиком есть в буфере (payload длиной size байт)
+    if (buffer.get_active_size() < 4 + size)
+        return;
 
-    // Opcode — следующий байт после длины (big-endian, 1 байт)
-    uint8_t opcode = data[2];
-
-    // Проверка ограничения размера (например, 2048)
-    if (packet_length - 1 > 2048) {
-        log->error("Payload too big: {}", packet_length - 1);
+    // Проверка ограничения размера payload
+    if (size > 2048) {
+        log->error("Payload too big: {}", size);
         session->close();
         return;
     }
 
-    // Payload начинается после 3-го байта
-    size_t payload_size = packet_length - 1;
-    auto body = std::vector<uint8_t>(data + 3, data + 3 + payload_size);
+    // Копируем payload (без заголовка)
+    std::vector<uint8_t> payload(data + 4, data + 4 + size);
 
-    // Помечаем прочитанными все байты пакета (длина + opcode + payload)
-    buffer.read_completed(2 + packet_length);
+    // Отмечаем, что прочитано 4 + size байт
+    buffer.read_completed(4 + size);
 
-    // Обрабатываем валидный пакет с использованием AuthPacket
-    process_valid_packet(session, static_cast<AuthOpcode>(opcode), body);
-}
+    AuthPacket packet;
+    packet.raw().write_bytes(payload);   // пишем только payload без заголовка
 
-void ReaderAuthSession::process_valid_packet(std::shared_ptr<ClientSession> session,
-                                             AuthOpcode opcode,
-                                             const std::vector<uint8_t>& body) {
-    auto log = Logger::get();
     try {
-        // Создаем пакет с заданным opcode
-        AuthPacket packet(opcode);
-
-        // Копируем body в буфер пакета
-        packet.raw().write_bytes(body);
-
-        // Вызываем обработчик
+        packet.set_header(static_cast<AuthOpcode>(cmd), error, size);
+        packet.raw().reset_read();
         HandlersAuth::dispatch(session, packet);
-
     } catch (const std::exception& ex) {
         log->error("AuthPacket processing failed: {}", ex.what());
         session->close();

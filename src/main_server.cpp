@@ -18,7 +18,7 @@ int main() {
         } else if (network_threads == 0) {
             network_threads = 1; // безопасное значение по умолчанию
         }
-        int port = 6112;
+        int port = 3724;
 
         // 🟢 Используем только io_context
         boost::asio::io_context io_context;

@@ -3,11 +3,13 @@
 #include <utility>
 #include "packet/PacketUtils.hpp"
 #include "utf8utils/UTF8Utils.hpp"
+#include "src/server/SessionMode/authserver/opcodes/AuthResult.hpp"
+#include "utils/NetUtils.hpp"
 
 using namespace HandlersAuth;
 
 void HandlersAuth::dispatch(std::shared_ptr<ClientSession> session, AuthPacket &p) {
-    AuthOpcode opcode = p.get_id();
+    AuthOpcode opcode = p.cmd();
     auto log = Logger::get();
 
     switch (opcode) {
@@ -58,53 +60,122 @@ void HandlersAuth::handle_ping(std::shared_ptr<ClientSession> session, AuthPacke
     PacketUtils::send_packet_as<AuthPacket>(std::move(session), reply);
 }
 
-boost::asio::awaitable<void> HandlersAuth::handle_logon_challenge(std::shared_ptr<ClientSession> session, AuthPacket &p) {
+boost::asio::awaitable<void>
+HandlersAuth::handle_logon_challenge(std::shared_ptr<ClientSession> session, AuthPacket &p) {
     auto log = Logger::get();
+    // оборачиваем в try/catch, в случае проблем с чтением (криво заполненные поля или несоответствие length) - шлем AUTH_UNKNOWN_ACCOUNT
+    try {
+        // Первые 4 байта уже прочитаны
+        uint8_t cmd = static_cast<uint8_t>(p.cmd());
+        uint8_t error = p.error();
+        uint16_t size = p.size();
 
-    std::string username = p.read_string_nt();
-    log->info("[HandlersAuth] AUTH_CMSG_LOGON_CHALLENGE username: {}", username);
+        // Считывать начинаем из payload
+        std::string gamename = p.read_string_raw_le(4);     // 0x04 (LE?)
 
-    if (!UTF8Utils::is_valid_utf8(username)) {
-        log->error("[HandlersAuth] AUTH_CMSG_LOGON_CHALLENGE Invalid UTF-8 username received: {}", username);
-        // Обработка ошибки, например отказ
-        co_return;
-    }
+        uint8_t version1 = p.read_uint8();                  // 0x08
+        uint8_t version2 = p.read_uint8();                  // 0x09
+        uint8_t version3 = p.read_uint8();                  // 0x0A
 
-    username = UTF8Utils::to_lowercase(username);
+        uint16_t build = p.read_uint16_le();                // 0x0B  (LE)
 
-    // Лезем в бд и смотрим запись:
-    PreparedStatement stmt("SELECT_ACCOUNT_BY_USERNAME");
-    stmt.set_param(0, username);
+        std::string platform = p.read_string_raw_le(4); // 0x0D (LE)
+        std::string os = p.read_string_raw_le(4);       // 0x11 (LE)
+        std::string country = p.read_string_raw_le(4);  // 0x15 (LE)
 
-    auto user = session->server()->db()->execute_sync<AccountsRow>(stmt);
-    if (user) {
-        log->info("[HandlersAuth] User '{}' found.", username);
+        uint32_t timezone = p.read_uint32_le();             // 0x19 (LE)
+        uint32_t ip = p.read_uint32_le();                   // 0x1D
+        std::string ip_str_le = NetUtils::uint32_to_ip_le(ip); // "127.0.0.1"
 
-        auto auth = session->getAuthSession();
-        // Загружаем salt и verifier из AuthSession (предполагается, что они уже есть)
-        std::string salt = user->salt.value();            // salt в hex формате
-        std::string verifier = user->verifier.value();    // verifier в hex формате
+        uint8_t name_len = p.read_uint8();               // 0x21
+        std::string username = p.read_string_raw_be(name_len); // 0x22
 
-        if (salt.empty() || verifier.empty()) {
-            log->error("No salt or verifier found for user '{}'", username);
-            // Обработка ошибки: возможно, закрыть сессию или отправить отказ
+        log->info(
+                "[HandlersAuth] AUTH_CMSG_LOGON_CHALLENGE:\n"
+                " cmd=0x{:02X}\n"
+                " error=0x{:02X}\n"
+                " size={}\n"
+                " gamename={}\n"
+                " version={}.{}.{}\n"
+                " build={}\n"
+                " platform={}\n"
+                " os={}\n"
+                " country={}\n"
+                " timezone={}\n"
+                " ip={}\n"
+                " name_len={}\n"
+                " username={}",
+                cmd, error, size,
+                gamename,
+                version1, version2, version3,
+                build,
+                platform,
+                os,
+                country,
+                std::to_string(timezone),
+                ip_str_le,
+                name_len,
+                username
+        );
+
+        if (!UTF8Utils::is_valid_utf8(username)) {
+            log->error("[HandlersAuth] AUTH_CMSG_LOGON_CHALLENGE - Invalid UTF-8 username received: {}", username);
+            // Обработка ошибки, например отказ
+            AuthPacket reply(AuthOpcode::AUTH_SMSG_LOGON_CHALLENGE);
+            reply.write_uint8(AUTH_UNKNOWN_ACCOUNT);
+            PacketUtils::send_packet_as<AuthPacket>(std::move(session), reply);
             co_return;
         }
 
-        // Загружаем salt и verifier в SRP
-        auto srp = auth->srp();
-        srp->load_verifier(salt, verifier);
+        username = UTF8Utils::to_lowercase(username);
 
-        // Генерируем серверный публичный ключ B на основе текущего verifier
-        srp->generate_server_ephemeral();
+        // Лезем в бд и смотрим запись:
+        PreparedStatement stmt("SELECT_ACCOUNT_BY_USERNAME");
+        stmt.set_param(0, username);
 
+        auto user = session->server()->db()->execute_sync<AccountsRow>(stmt);
+        if (user) {
+            log->info("[HandlersAuth] User '{}' found.", username);
+
+            auto auth = session->getAuthSession();
+            // Загружаем salt и verifier из AuthSession (предполагается, что они уже есть)
+            std::string salt = user->salt.value();            // salt в hex формате
+            std::string verifier = user->verifier.value();    // verifier в hex формате
+
+            if (salt.empty() || verifier.empty()) {
+                log->error("[HandlersAuth] AUTH_CMSG_LOGON_CHALLENGE - No salt or verifier found for user '{}'",
+                           username);
+                AuthPacket reply(AuthOpcode::AUTH_SMSG_LOGON_CHALLENGE);
+                reply.write_uint8(AUTH_BAD_SERVER_PROOF);
+                PacketUtils::send_packet_as<AuthPacket>(std::move(session), reply);
+                co_return;
+            }
+
+            // Загружаем salt и verifier в SRP
+            auto srp = auth->srp();
+            srp->load_verifier(salt, verifier);
+
+            // Генерируем серверный публичный ключ B на основе текущего verifier
+            srp->generate_server_ephemeral();
+
+            // Формируем ответ
+            AuthPacket reply(AuthOpcode::AUTH_SMSG_LOGON_CHALLENGE);
+            reply.write_string_nt_le(salt);                             // salt
+            reply.write_string_nt_le(srp->bn_to_hex_str(srp->get_B())); // server public B
+            PacketUtils::send_packet_as<AuthPacket>(std::move(session), reply);
+        } else {
+            log->error("[HandlersAuth] User '{}' not founded", username);
+            // УЗ не найдена: отправить отказ
+            AuthPacket reply(AuthOpcode::AUTH_SMSG_LOGON_CHALLENGE);
+            reply.write_uint8(AUTH_UNKNOWN_ACCOUNT);
+            PacketUtils::send_packet_as<AuthPacket>(std::move(session), reply);
+        }
+    } catch (...) {
+        log->error("[HandlersAuth] AUTH_CMSG_LOGON_CHALLENGE - couldn't read the package fields");
         // Формируем ответ
         AuthPacket reply(AuthOpcode::AUTH_SMSG_LOGON_CHALLENGE);
-        reply.write_string_nt(salt);                             // salt
-        reply.write_string_nt(srp->bn_to_hex_str(srp->get_B())); // server public B
+        reply.write_uint8(AUTH_FAILED);
         PacketUtils::send_packet_as<AuthPacket>(std::move(session), reply);
-    } else {
-        log->info("[HandlersAuth] User '{}' not founded", username);
     }
     co_return;
 }
