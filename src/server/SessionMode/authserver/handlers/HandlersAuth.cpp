@@ -41,7 +41,14 @@ void HandlersAuth::dispatch(std::shared_ptr<ClientSession> session, AuthPacket &
 }
 
 void HandlersAuth::handle_ping(std::shared_ptr<ClientSession> session, AuthPacket &p) {
-    Logger::get()->debug("[handler] AUTH_CMSG_PING");
+    // Считываем ping ID из клиента (4 байта LE)
+    uint32_t ping = p.read_uint32_le();
+    Logger::get()->debug("[handler] AUTH_CMSG_PING with ping: {}", ping);
+
+    // Формируем PONG — возвращаем то же самое число
     AuthPacket reply(AuthOpcode::AUTH_SMSG_PONG);
+    reply.write_uint32_le(ping);
+
+    // Отправляем обратно клиенту
     PacketUtils::send_packet_as<AuthPacket>(std::move(session), reply);
 }

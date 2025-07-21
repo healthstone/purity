@@ -31,6 +31,7 @@ set(COMMON_INCLUDE_DIRS
 add_executable(client
         src/main_client.cpp
         ${CLIENT_SOURCES}
+        ${COMMON_SOURCES}
 )
 
 target_link_libraries(client PRIVATE

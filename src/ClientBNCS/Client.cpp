@@ -1,5 +1,6 @@
 #include "Client.hpp"
 #include "Logger.hpp"
+#include "generators/GeneratorUtils.hpp"
 #include <utility>
 
 using boost::asio::ip::tcp;
@@ -69,6 +70,8 @@ void Client::start_heartbeat() {
 
 void Client::send_ping() {
     AuthPacket ping(AuthOpcode::AUTH_CMSG_PING);
+    uint32_t ping_id = GeneratorUtils::random_uint32();
+    ping.write_uint32_le(ping_id);
     send_packet(ping);
     Logger::get()->debug("[Client] Sent AUTH_CMSG_PING");
 }
