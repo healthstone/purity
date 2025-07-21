@@ -8,7 +8,6 @@
 #include <sstream>
 #include "ByteBuffer.hpp"
 #include "Logger.hpp"
-#include "src/server/SessionMode/bncs/opcodes/opcodes8.hpp"
 
 class Packet {
 protected:
@@ -22,15 +21,28 @@ public:
     virtual std::vector<uint8_t> build_packet() const = 0;
     const std::vector<uint8_t>& serialize() const { return buffer_.data(); }
 
-    static void log_raw_payload(BNETOpcode8 id, const std::vector<uint8_t>& payload, const std::string& prefix = "[Packet] RAW FULL DUMP") {
-        std::ostringstream oss;
-        oss << prefix << " opcode ID: " << std::to_string(static_cast<uint8_t>(id)) << " (" << payload.size() << " bytes) Payload: ";
+    static void log_raw_payload(
+            uint16_t opcode,
+            const std::vector<uint8_t>& payload,
+            const std::string& prefix = "[Packet] RAW DUMP")
+    {
+        // Формируем hex-дамп для payload (короткий/основной)
+        std::string hex_dump;
+        hex_dump.reserve(payload.size() * 3);
         for (uint8_t b : payload) {
-            oss << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(b) << " ";
+            fmt::format_to(std::back_inserter(hex_dump), "{:02X} ", b);
         }
+
+        // Логируем краткий основной дамп
+        std::string log_message = fmt::format("{} opcode ID: {} ({} bytes) Payload: {}",
+                                              prefix,
+                                              opcode,
+                                              payload.size(),
+                                              hex_dump);
+
         MDC mdc;
-        mdc.put("opcode", std::to_string(static_cast<uint8_t>(id)));
-        Logger::get()->debug_with_mdc(oss.str(), mdc);
+        mdc.put("opcode", std::to_string(opcode));
+        Logger::get()->debug_with_mdc(log_message, mdc);
     }
 
     // ==================== WRITE METHODS ====================

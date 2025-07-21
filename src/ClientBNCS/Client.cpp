@@ -62,30 +62,18 @@ void Client::start_heartbeat() {
     heartbeat_timer.async_wait([this](const boost::system::error_code &ec) {
         if (!ec && connected) {
             send_ping();
-            start_heartbeat(); // repeat
+            start_heartbeat(); // повторяем
         }
     });
 }
 
 void Client::send_ping() {
-    BNETPacket8 ping(BNETOpcode8::SID_PING);
+    AuthPacket ping(AuthOpcode::AUTH_CMSG_PING);
     send_packet(ping);
-    Logger::get()->debug("[Client] Sent SID_PING");
+    Logger::get()->debug("[Client] Sent AUTH_CMSG_PING");
 }
 
-void Client::send_message(const std::string &msg) {
-    BNETPacket8 packet(BNETOpcode8::SID_CHATCOMMAND);
-    packet.write_string_nt(msg);
-    send_packet(packet);
-}
-
-void Client::send_auth() {
-//    BNETPacket8 packet(BNETOpcode8::SID_AUTH_INFO);
-//    packet.write_string(msg);
-//    send_packet(packet);
-}
-
-void Client::send_packet(const BNETPacket8 &packet) {
+void Client::send_packet(const AuthPacket &packet) {
     std::vector<uint8_t> full_packet = packet.build_packet();
 
     if (!connected) {
@@ -120,7 +108,7 @@ void Client::flush_queue() {
 }
 
 void Client::start_receive_loop() {
-    auto header = std::make_shared<std::vector<uint8_t>>(3); // [ID][LEN_BE]
+    auto header = std::make_shared<std::vector<uint8_t>>(3); // [Length LE(2)][Opcode(1)]
 
     boost::asio::async_read(
             socket, boost::asio::buffer(*header),
@@ -138,27 +126,34 @@ void Client::start_receive_loop() {
                     return;
                 }
 
-                uint8_t id = (*header)[0];
-                uint16_t payload_size = (static_cast<uint16_t>((*header)[1]) << 8) | (*header)[2];
+                // Читаем длину пакета LE: Length = 1 (opcode) + PayloadSize
+                uint16_t length = (*header)[0] | ((*header)[1] << 8);
+                uint8_t opcode = (*header)[2];
+
+                if (length == 0) {
+                    log->error("[Client] Invalid length = 0");
+                    connected = false;
+                    schedule_reconnect();
+                    return;
+                }
+
+                uint16_t payload_size = length - 1; // Payload = Length - 1 (opcode)
 
                 if (payload_size > 2048) {
-                    log->error("[Client] Invalid payload size: {} (too large)", payload_size);
+                    log->error("[Client] Payload size too large: {}", payload_size);
                     connected = false;
                     schedule_reconnect();
                     return;
                 }
 
                 if (payload_size == 0) {
-                    //log->warn("[Client] Received zero-length payload, opcode: 0x{:02X}", id);
                     try {
-                        // Всё ещё обрабатываем пустой пакет как валидный
-                        BNETOpcode8 opcode = static_cast<BNETOpcode8>(id);
-                        BNETPacket8 p = BNETPacket8::deserialize(opcode, {});
+                        AuthOpcode auth_opcode = static_cast<AuthOpcode>(opcode);
+                        AuthPacket p = AuthPacket::deserialize(auth_opcode, {});
                         handle_packet(p);
-                    } catch (const std::exception& ex) {
+                    } catch (const std::exception &ex) {
                         log->error("[Client] Failed to parse empty packet: {}", ex.what());
                     }
-
                     start_receive_loop();
                     return;
                 }
@@ -167,7 +162,7 @@ void Client::start_receive_loop() {
 
                 boost::asio::async_read(
                         socket, boost::asio::buffer(*payload),
-                        [this, payload, id](boost::system::error_code ec2, std::size_t) {
+                        [this, payload, opcode](boost::system::error_code ec2, std::size_t) {
                             auto log = Logger::get();
 
                             if (ec2) {
@@ -182,29 +177,27 @@ void Client::start_receive_loop() {
                             }
 
                             try {
-                                BNETOpcode8 opcode = static_cast<BNETOpcode8>(id);
-                                BNETPacket8 p = BNETPacket8::deserialize(opcode, *payload);
+                                AuthOpcode auth_opcode = static_cast<AuthOpcode>(opcode);
+                                AuthPacket p = AuthPacket::deserialize(auth_opcode, *payload);
                                 handle_packet(p);
-                            } catch (const std::exception& ex) {
+                            } catch (const std::exception &ex) {
                                 log->error("[Client] Failed to parse packet: {}", ex.what());
                             }
 
-                            // Старт следующего чтения
                             start_receive_loop();
-                        }
-                );
-            }
-    );
+                        });
+            });
 }
 
 
-void Client::handle_packet(BNETPacket8 &p) {
+void Client::handle_packet(AuthPacket &p) {
     auto log = Logger::get();
+
     switch (p.get_id()) {
-        case BNETOpcode8::SID_PING: {
-            log->debug("[Client] Received SID_PING");
+        case AuthOpcode::AUTH_SMSG_PONG:
+            log->debug("[Client] Received AUTH_SMSG_PONG");
             break;
-        }
+
         default:
             log->warn("[Client] Unknown opcode: {}", static_cast<uint8_t>(p.get_id()));
             break;

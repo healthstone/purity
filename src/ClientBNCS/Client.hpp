@@ -4,7 +4,7 @@
 #include <queue>
 #include <string>
 #include <vector>
-#include "src/server/SessionMode/bncs/opcodes/BNETPacket8.hpp"
+#include "src/server/SessionMode/authserver/opcodes/AuthPacket.hpp"
 
 class Client {
 public:
@@ -26,13 +26,13 @@ private:
 
     void send_ping();
 
-    void send_packet(const BNETPacket8 &packet);
+    void send_packet(const AuthPacket &packet);
 
     void flush_queue();
 
     void start_receive_loop();
 
-    void handle_packet(BNETPacket8 &packet);
+    void handle_packet(AuthPacket &packet);
 
     boost::asio::io_context &io;
     boost::asio::ip::tcp::socket socket;

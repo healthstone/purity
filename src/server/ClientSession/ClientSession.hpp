@@ -9,13 +9,13 @@
 #include "src/server/Server.hpp"
 #include "MessageBuffer.hpp"
 #include "packet/Packet.hpp"
-#include "src/server/SessionMode/bncs/entity/account/BNCSAccount.hpp"
+#include "src/server/SessionMode/authserver/entity/AuthSession.hpp"
 
 class Server; // forward declaration
 
 enum class SessionMode {
-    BNCS,
-    W3ROUTE
+    AUTH_SESSION,
+    REALM_SESSION
 };
 
 class ClientSession : public std::enable_shared_from_this<ClientSession> {
@@ -43,7 +43,7 @@ public:
         return read_buffer_;
     }
 
-    BNCSAccount* getBNCSAccount() { return bncsAccount_.get(); }
+    AuthSession* getAuthSession() { return authSession_.get(); }
 
 private:
     void do_read();
@@ -63,8 +63,8 @@ private:
     bool writing_ = false;
     std::atomic<bool> closed_{false};
 
-    SessionMode session_mode_ = SessionMode::BNCS;
+    SessionMode session_mode_ = SessionMode::AUTH_SESSION;
 
     // PvPGN
-    std::shared_ptr<BNCSAccount> bncsAccount_;
+    std::shared_ptr<AuthSession> authSession_;
 };
