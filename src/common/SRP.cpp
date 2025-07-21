@@ -8,7 +8,7 @@ SRP::SRP() {
     N = BN_new();
     g = BN_new();
 
-    // RFC 5054 1024-bit N/g pair (можешь взять любое другое)
+    // RFC 5054 1024-bit N (TrinityCore использует свое N, здесь пример)
     BN_hex2bn(&N, "EEAF0AB9ADB38DD69C33F80AFA8FC5E860C980DD98EDD3DFFFFFFFFFFFFFFFF");
     BN_set_word(g, 2);
 
@@ -33,24 +33,25 @@ SRP::~SRP() {
 }
 
 void SRP::generate_verifier(const std::string& username, const std::string& password, std::string& out_salt_hex, std::string& out_verifier_hex) {
-    // Random salt
+    // Генерируем случайную соль 16 байт
     unsigned char salt_bytes[16];
     RAND_bytes(salt_bytes, sizeof(salt_bytes));
     salt = bytes_to_hex(salt_bytes, sizeof(salt_bytes));
     out_salt_hex = salt;
 
-    // x = H(salt | H(username:password))
+    // x = SHA1(salt || SHA1(username ":" password))
     std::string up = username + ":" + password;
     unsigned char hash1[SHA_DIGEST_LENGTH];
     hash_sha1(up, hash1);
 
+    // Конкатенируем соль и hash1
     std::string x_input(reinterpret_cast<char*>(salt_bytes), sizeof(salt_bytes));
     x_input += std::string(reinterpret_cast<char*>(hash1), SHA_DIGEST_LENGTH);
 
     unsigned char hash2[SHA_DIGEST_LENGTH];
     hash_sha1(x_input, hash2);
 
-    BIGNUM* x = BN_bin2bn(hash2, SHA_DIGEST_LENGTH, NULL);
+    BIGNUM* x = BN_bin2bn(hash2, SHA_DIGEST_LENGTH, nullptr);
 
     // v = g^x mod N
     BN_mod_exp(v, g, x, N, ctx);
@@ -66,21 +67,37 @@ void SRP::load_verifier(const std::string& salt_hex, const std::string& verifier
 }
 
 void SRP::generate_server_ephemeral() {
-    BN_rand(b, 256, -1, 0); // b random
+    // k = 3 согласно TrinityCore
+    BIGNUM* k = BN_new();
+    BN_set_word(k, 3);
+
+    // b - секретный серверный ключ, 256 бит случайный
+    BN_rand(b, 256, -1, 0);
+
+    // g^b mod N
     BIGNUM* gb = BN_new();
     BN_mod_exp(gb, g, b, N, ctx);
-    BN_copy(B, gb);
+
+    // k*v mod N
+    BIGNUM* kv = BN_new();
+    BN_mod_mul(kv, k, v, N, ctx);
+
+    // B = (k*v + g^b) mod N
+    BN_mod_add(B, kv, gb, N, ctx);
+
+    BN_free(k);
     BN_free(gb);
+    BN_free(kv);
 }
 
 void SRP::process_client_public(const std::string& A_hex) {
     BN_hex2bn(&A, A_hex.c_str());
 
-    // u = H(A|B)
+    // u = SHA1(A|B)
     std::string AB = bn_to_hex_str(A) + bn_to_hex_str(B);
     unsigned char hash[SHA_DIGEST_LENGTH];
     hash_sha1(AB, hash);
-    u = BN_bin2bn(hash, SHA_DIGEST_LENGTH, NULL);
+    u = BN_bin2bn(hash, SHA_DIGEST_LENGTH, nullptr);
 
     // S = (A * v^u)^b mod N
     BIGNUM* vu = BN_new();
@@ -96,7 +113,7 @@ void SRP::process_client_public(const std::string& A_hex) {
 }
 
 bool SRP::verify_proof(const std::string& client_M1_hex) {
-    // M1 = H(A|B|S)
+    // M1 = SHA1(A|B|S)
     std::string input = bn_to_hex_str(A) + bn_to_hex_str(B) + bn_to_hex_str(S);
     unsigned char hash[SHA_DIGEST_LENGTH];
     hash_sha1(input, hash);
@@ -109,21 +126,19 @@ bool SRP::verify_proof(const std::string& client_M1_hex) {
 }
 
 void SRP::generate_fake_challenge() {
-    // Random salt
+    // Fake salt
     unsigned char salt_bytes[16];
     RAND_bytes(salt_bytes, sizeof(salt_bytes));
     salt = bytes_to_hex(salt_bytes, sizeof(salt_bytes));
 
-    // v = random fake (тут можно оставить v = 0)
+    // v = случайное число (можно нулём)
     BN_rand(v, 256, -1, 0);
 
     generate_server_ephemeral();
 }
 
 void SRP::generate_verifier_from_proof(const std::string& A_hex, const std::string& client_M1_hex, std::string& out_salt_hex, std::string& out_verifier_hex) {
-    // PvPGN-style: фактически ты подбираешь тот же алгоритм что и generate_verifier()
-    // Реально здесь SRP знает A и M1, и может пересобрать:
-    // Для упрощения делаем новую пару salt + verifier (реально надо SRP6 подгонять)
+    // Просто вызывает generate_verifier с произвольными данными, для совместимости
     generate_verifier("newuser", "newpassword", out_salt_hex, out_verifier_hex);
 }
 

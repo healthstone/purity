@@ -30,12 +30,12 @@ public:
         full_packet.insert(full_packet.end(), header_data.begin(), header_data.end());
         full_packet.insert(full_packet.end(), body.begin(), body.end());
 
-        log_raw_payload(static_cast<uint16_t>(get_id()), body, "[AuthPacket::build_packet]");
+        //log_raw_payload(static_cast<uint16_t>(get_id()), body, "[AuthPacket::build_packet]");
         return full_packet;
     }
 
     static AuthPacket deserialize(AuthOpcode id, const std::vector<uint8_t> &payload) {
-        log_raw_payload(static_cast<uint16_t>(id), payload, "[AuthPacket::deserialize]");
+        //log_raw_payload(static_cast<uint16_t>(id), payload, "[AuthPacket::deserialize]");
 
         AuthPacket p(id);
         p.buffer_ = ByteBuffer(payload);

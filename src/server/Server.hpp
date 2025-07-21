@@ -21,6 +21,8 @@ public:
     void remove_session(std::shared_ptr<ClientSession> session);
     void log_session_count();
 
+    std::shared_ptr<Database> db() { return db_; }
+
 private:
     boost::asio::io_context &io_context_;
     boost::asio::ip::tcp::acceptor acceptor_;

@@ -14,9 +14,7 @@ public:
 
     void disconnect();
 
-    void send_message(const std::string &msg);
-
-    void send_auth();
+    void handle_logon_challenge();
 
 private:
 

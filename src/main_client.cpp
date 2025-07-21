@@ -20,15 +20,15 @@ int main() {
 //        }
 //    }).detach();
 
-//    // Первый таймер — отправка первого пакета через 1000мс
-//    boost::asio::steady_timer timer1(io);
-//    timer1.expires_after(std::chrono::milliseconds(1000));
-//    timer1.async_wait([&client_bncs](const boost::system::error_code &ec) {
-//        if (!ec) {
-//            Logger::get()->info("sending request on lookup account");
-//            client_bncs->send_select_acc_by_username("test_User");
-//        }
-//    });
+    // Первый таймер — отправка первого пакета через 1000мс
+    boost::asio::steady_timer timer1(io);
+    timer1.expires_after(std::chrono::milliseconds(1000));
+    timer1.async_wait([&client](const boost::system::error_code &ec) {
+        if (!ec) {
+            Logger::get()->info("sending request on lookup account");
+            client->handle_logon_challenge();
+        }
+    });
 
     // Настраиваем сигнал Ctrl+C
     boost::asio::signal_set signals(io, SIGINT, SIGTERM);

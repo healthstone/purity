@@ -59,7 +59,7 @@ void Client::schedule_reconnect() {
 }
 
 void Client::start_heartbeat() {
-    heartbeat_timer.expires_after(5s);
+    heartbeat_timer.expires_after(30s);
     heartbeat_timer.async_wait([this](const boost::system::error_code &ec) {
         if (!ec && connected) {
             send_ping();
@@ -74,6 +74,13 @@ void Client::send_ping() {
     ping.write_uint32_le(ping_id);
     send_packet(ping);
     Logger::get()->debug("[Client] Sent AUTH_CMSG_PING");
+}
+
+void Client::handle_logon_challenge() {
+    AuthPacket packet(AuthOpcode::AUTH_CMSG_LOGON_CHALLENGE);
+    packet.write_string_nt("Test_user");
+    send_packet(packet);
+    Logger::get()->debug("[Client] Sent AUTH_CMSG_LOGON_CHALLENGE");
 }
 
 void Client::send_packet(const AuthPacket &packet) {
@@ -200,6 +207,13 @@ void Client::handle_packet(AuthPacket &p) {
         case AuthOpcode::AUTH_SMSG_PONG:
             log->debug("[Client] Received AUTH_SMSG_PONG");
             break;
+
+        case AuthOpcode::AUTH_SMSG_LOGON_CHALLENGE: {
+            std::string salt = p.read_string_nt();
+            std::string public_b = p.read_string_nt();
+            log->debug("[Client] Received AUTH_SMSG_LOGON_CHALLENGE: salt={}, public_B={}", salt, public_b);
+            break;
+        }
 
         default:
             log->warn("[Client] Unknown opcode: {}", static_cast<uint8_t>(p.get_id()));
