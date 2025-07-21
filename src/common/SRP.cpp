@@ -9,8 +9,7 @@ SRP::SRP() {
     g = BN_new();
 
     // RFC 5054 1024-bit N/g pair (можешь взять любое другое)
-    BN_hex2bn(&N, "EEAF0AB9ADB38DD69C33F80AFA8FC5E8..."
-                  "60C980DD98EDD3DFFFFFFFFFFFFFFFF");
+    BN_hex2bn(&N, "EEAF0AB9ADB38DD69C33F80AFA8FC5E860C980DD98EDD3DFFFFFFFFFFFFFFFF");
     BN_set_word(g, 2);
 
     v = BN_new();

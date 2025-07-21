@@ -44,6 +44,10 @@ public:
         spdlog::init_thread_pool(queue_size, num_threads);
     }
 
+    static void shutdown() {
+        spdlog::shutdown();
+    }
+
     static std::shared_ptr<Logger> get() {
         static std::shared_ptr<Logger> instance = std::shared_ptr<Logger>(new Logger());
         return instance;

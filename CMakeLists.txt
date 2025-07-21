@@ -71,8 +71,9 @@ target_include_directories(server PRIVATE
 
 # === Тесты ===
 add_executable(tests
-        tests/ByteBufferTest.cpp
+        tests/tests_main.cpp
         ${TEST_SOURCES}
+        ${COMMON_SOURCES}
 )
 
 target_link_libraries(tests PRIVATE
@@ -80,7 +81,6 @@ target_link_libraries(tests PRIVATE
         Catch2::Catch2WithMain
         OpenSSL::Crypto
         spdlog::spdlog
-        ${COMMON_SOURCES}  # Линкуем общие исходники
 )
 
 target_include_directories(tests PRIVATE
