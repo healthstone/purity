@@ -11,13 +11,12 @@ public:
     SRP();
     ~SRP();
 
-    // Генерация соли и верификатора по имени пользователя и паролю (пароль передается как есть)
+    // Генерация соли и верификатора по имени пользователя и паролю (пароль в открытом виде)
     void generate_verifier(const std::string& username, const std::string& password,
                            std::string& out_salt_hex, std::string& out_verifier_hex);
 
     void load_verifier(const std::string& salt_hex, const std::string& verifier_hex);
 
-    // Генерация серверного эфемерного ключа B, без пароля в параметрах
     void generate_server_ephemeral();
 
     void process_client_public(const std::string& A_hex);
@@ -31,17 +30,23 @@ public:
 
     std::string bn_to_hex_str(const BIGNUM* bn) const;
 
-    static std::string bytes_to_hex(const unsigned char* bytes, size_t len);
+    // Возвращает серверный публичный ключ B в байтах (для отправки в пакет)
+    std::vector<uint8_t> get_B_bytes() const;
+
+    // Возвращает модуль N в байтах
+    std::vector<uint8_t> get_N_bytes() const;
+
+    // Возвращает генератор g (как uint8_t)
+    uint8_t get_generator() const;
+
+    // Сеттер для A из байт
+    void set_A_from_bytes(const std::vector<uint8_t>& bytes);
 
     const BIGNUM* get_A() const { return A; }
     const BIGNUM* get_B() const { return B; }
     const BIGNUM* get_verifier() const { return v; }
+    const BIGNUM* get_N() const { return N; }
     const std::string& get_salt() const { return salt; }
-
-    void set_A_from_bytes(const std::vector<uint8_t>& bytes) {
-        if (A) BN_free(A);
-        A = BN_bin2bn(bytes.data(), static_cast<int>(bytes.size()), nullptr);
-    }
 
 private:
     void hash_sha1(const std::string& input, unsigned char output[SHA_DIGEST_LENGTH]) const;

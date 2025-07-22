@@ -69,7 +69,7 @@ void Client::start_heartbeat() {
 }
 
 void Client::send_ping() {
-    AuthPacket ping(AuthOpcode::AUTH_CMSG_PING);
+    AuthPacket ping(AuthCmd::AUTH_CMSG_PING);
     uint32_t ping_id = GeneratorUtils::random_uint32();
     ping.write_uint32_le(ping_id);
     send_packet(ping);
@@ -77,7 +77,7 @@ void Client::send_ping() {
 }
 
 void Client::handle_logon_challenge() {
-    AuthPacket packet(AuthOpcode::AUTH_CMSG_LOGON_CHALLENGE);
+    AuthPacket packet(AuthCmd::AUTH_LOGON_CHALLENGE);
 
     //// Пример чтения в порядке протокола
     //        uint8_t cmd = p.read_uint8_be();             // 0x00
@@ -181,7 +181,7 @@ void Client::start_receive_loop() {
 
                 if (payload_size == 0) {
                     try {
-                        AuthOpcode auth_opcode = static_cast<AuthOpcode>(opcode);
+                        AuthCmd auth_opcode = static_cast<AuthCmd>(opcode);
                         AuthPacket p = AuthPacket::deserialize(auth_opcode, {});
                         handle_packet(p);
                     } catch (const std::exception &ex) {
@@ -210,7 +210,7 @@ void Client::start_receive_loop() {
                             }
 
                             try {
-                                AuthOpcode auth_opcode = static_cast<AuthOpcode>(opcode);
+                                AuthCmd auth_opcode = static_cast<AuthCmd>(opcode);
                                 AuthPacket p = AuthPacket::deserialize(auth_opcode, *payload);
                                 handle_packet(p);
                             } catch (const std::exception &ex) {
@@ -227,11 +227,11 @@ void Client::handle_packet(AuthPacket &p) {
     auto log = Logger::get();
 
     switch (p.cmd()) {
-        case AuthOpcode::AUTH_SMSG_PONG:
+        case AuthCmd::AUTH_SMSG_PONG:
             log->debug("[Client] Received AUTH_SMSG_PONG");
             break;
 
-        case AuthOpcode::AUTH_SMSG_LOGON_CHALLENGE: {
+        case AuthCmd::AUTH_LOGON_CHALLENGE: {
             std::string salt = p.read_string_nt_le();
             std::string public_b = p.read_string_nt_le();
             log->debug("[Client] Received AUTH_SMSG_LOGON_CHALLENGE: salt={}, public_B={}", salt, public_b);

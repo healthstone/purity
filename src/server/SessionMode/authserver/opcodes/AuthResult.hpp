@@ -4,22 +4,30 @@
 
 enum AuthResult : uint8_t
 {
-    AUTH_OK                   = 0x00, // Успешно
-    AUTH_FAILED               = 0x04, // Общая ошибка
-    AUTH_REJECT               = 0x05, // Отклонено
-    AUTH_BAD_SERVER_PROOF     = 0x06, // Неверный SRP proof
-    AUTH_UNAVAILABLE          = 0x08, // Сервер недоступен
-    AUTH_SYSTEM_ERROR         = 0x09, // Системная ошибка
-    AUTH_BILLING_ERROR        = 0x0A, // Проблема с подпиской
-    AUTH_BILLING_EXPIRED      = 0x0B, // Подписка истекла
-    AUTH_VERSION_MISMATCH     = 0x0C, // Несовпадение версии клиента
-    AUTH_UNKNOWN_ACCOUNT      = 0x0D, // Аккаунт не найден
-    AUTH_INCORRECT_PASSWORD   = 0x0E, // Неверный пароль
-    AUTH_SESSION_EXPIRED      = 0x0F, // Сессия устарела
-    AUTH_SERVER_SHUTTING_DOWN = 0x10, // Сервер выключается
-    AUTH_ALREADY_LOGGING_IN   = 0x11, // Уже логинится
-    AUTH_LOGIN_SERVER_NOT_FOUND = 0x12, // Логин-сервер не найден
-    AUTH_WAIT_QUEUE           = 0x1F, // В очереди
-    AUTH_BANNED               = 0x03, // Аккаунт забанен
-    AUTH_UNKNOWN_ERROR        = 0xFF, // Неизвестная ошибка
+    WOW_SUCCESS                                  = 0x00,
+    WOW_FAIL_BANNED                              = 0x03,
+    WOW_FAIL_UNKNOWN_ACCOUNT                     = 0x04,
+    WOW_FAIL_INCORRECT_PASSWORD                  = 0x05,
+    WOW_FAIL_ALREADY_ONLINE                      = 0x06,
+    WOW_FAIL_NO_TIME                             = 0x07,
+    WOW_FAIL_DB_BUSY                             = 0x08,
+    WOW_FAIL_VERSION_INVALID                     = 0x09,
+    WOW_FAIL_VERSION_UPDATE                      = 0x0A,
+    WOW_FAIL_INVALID_SERVER                      = 0x0B,
+    WOW_FAIL_SUSPENDED                           = 0x0C,
+    WOW_FAIL_FAIL_NOACCESS                       = 0x0D,
+    WOW_SUCCESS_SURVEY                           = 0x0E,
+    WOW_FAIL_PARENTCONTROL                       = 0x0F,
+    WOW_FAIL_LOCKED_ENFORCED                     = 0x10,
+    WOW_FAIL_TRIAL_ENDED                         = 0x11,
+    WOW_FAIL_USE_BATTLENET                       = 0x12,
+    WOW_FAIL_ANTI_INDULGENCE                     = 0x13,
+    WOW_FAIL_EXPIRED                             = 0x14,
+    WOW_FAIL_NO_GAME_ACCOUNT                     = 0x15,
+    WOW_FAIL_CHARGEBACK                          = 0x16,
+    WOW_FAIL_INTERNET_GAME_ROOM_WITHOUT_BNET     = 0x17,
+    WOW_FAIL_GAME_ACCOUNT_LOCKED                 = 0x18,
+    WOW_FAIL_UNLOCKABLE_LOCK                     = 0x19,
+    WOW_FAIL_CONVERSION_REQUIRED                 = 0x20,
+    WOW_FAIL_DISCONNECTED                        = 0xFF
 };

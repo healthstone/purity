@@ -22,7 +22,7 @@ public:
     const std::vector<uint8_t>& serialize() const { return buffer_.data(); }
 
     static void log_raw_payload(
-            uint16_t opcode,
+            const std::string& opcode,
             const std::vector<uint8_t>& payload,
             const std::string& prefix = "[Packet] RAW DUMP")
     {
@@ -39,7 +39,7 @@ public:
                                               hex_dump);
 
         MDC mdc;
-        mdc.put("opcode", std::to_string(opcode));
+        mdc.put("opcode", opcode);
         Logger::get()->debug_with_mdc(log_message, mdc);
     }
 

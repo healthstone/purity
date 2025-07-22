@@ -1,4 +1,5 @@
 #include "SRP.hpp"
+#include "utils/HexUtils.hpp"
 #include <sstream>
 #include <iomanip>
 #include <cstring>
@@ -8,9 +9,16 @@ SRP::SRP() {
     N = BN_new();
     g = BN_new();
 
-    // RFC 5054 1024-bit N (TrinityCore использует свое N, здесь пример)
-    BN_hex2bn(&N, "EEAF0AB9ADB38DD69C33F80AFA8FC5E860C980DD98EDD3DFFFFFFFFFFFFFFFF");
-    BN_set_word(g, 2);
+    // TrinityCore 1024-bit N (RFC 5054 Group 1024-bit)
+    BN_hex2bn(&N,
+              "B10B8F96A080E01DDE92DE5EAE5D54EC52C99FBCFB06A3C6"
+              "9A6A9DCA52D23B616073E28675A23D189838EF1E2EE652C0"
+              "13ECB4AEA906112324975C3CD49B83BFACCBDD7D90C4BD70"
+              "98488E9C219A73724EFFD6FAE5644738FAA31A4FF55BCCC0"
+              "A151AF5F0DC8B4BD45BF37DF365C1A65E68CFDA76D4DA708"
+              "DF1FB2BC2E4A4371");
+
+    BN_set_word(g, 7); // TrinityCore использует g=7
 
     v = BN_new();
     b = BN_new();
@@ -36,7 +44,7 @@ void SRP::generate_verifier(const std::string& username, const std::string& pass
     // Генерируем случайную соль 16 байт
     unsigned char salt_bytes[16];
     RAND_bytes(salt_bytes, sizeof(salt_bytes));
-    salt = bytes_to_hex(salt_bytes, sizeof(salt_bytes));
+    salt = HexUtils::bytes_to_hex(salt_bytes, sizeof(salt_bytes));
     out_salt_hex = salt;
 
     // x = SHA1(salt || SHA1(username ":" password))
@@ -44,7 +52,6 @@ void SRP::generate_verifier(const std::string& username, const std::string& pass
     unsigned char hash1[SHA_DIGEST_LENGTH];
     hash_sha1(up, hash1);
 
-    // Конкатенируем соль и hash1
     std::string x_input(reinterpret_cast<char*>(salt_bytes), sizeof(salt_bytes));
     x_input += std::string(reinterpret_cast<char*>(hash1), SHA_DIGEST_LENGTH);
 
@@ -67,22 +74,17 @@ void SRP::load_verifier(const std::string& salt_hex, const std::string& verifier
 }
 
 void SRP::generate_server_ephemeral() {
-    // k = 3 согласно TrinityCore
     BIGNUM* k = BN_new();
-    BN_set_word(k, 3);
+    BN_set_word(k, 3); // k = 3, согласно TrinityCore
 
-    // b - секретный серверный ключ, 256 бит случайный
-    BN_rand(b, 256, -1, 0);
+    BN_rand(b, 256, -1, 0); // 256 бит случайный b
 
-    // g^b mod N
     BIGNUM* gb = BN_new();
     BN_mod_exp(gb, g, b, N, ctx);
 
-    // k*v mod N
     BIGNUM* kv = BN_new();
     BN_mod_mul(kv, k, v, N, ctx);
 
-    // B = (k*v + g^b) mod N
     BN_mod_add(B, kv, gb, N, ctx);
 
     BN_free(k);
@@ -93,13 +95,11 @@ void SRP::generate_server_ephemeral() {
 void SRP::process_client_public(const std::string& A_hex) {
     BN_hex2bn(&A, A_hex.c_str());
 
-    // u = SHA1(A|B)
     std::string AB = bn_to_hex_str(A) + bn_to_hex_str(B);
     unsigned char hash[SHA_DIGEST_LENGTH];
     hash_sha1(AB, hash);
     u = BN_bin2bn(hash, SHA_DIGEST_LENGTH, nullptr);
 
-    // S = (A * v^u)^b mod N
     BIGNUM* vu = BN_new();
     BN_mod_exp(vu, v, u, N, ctx);
 
@@ -113,7 +113,6 @@ void SRP::process_client_public(const std::string& A_hex) {
 }
 
 bool SRP::verify_proof(const std::string& client_M1_hex) {
-    // M1 = SHA1(A|B|S)
     std::string input = bn_to_hex_str(A) + bn_to_hex_str(B) + bn_to_hex_str(S);
     unsigned char hash[SHA_DIGEST_LENGTH];
     hash_sha1(input, hash);
@@ -126,19 +125,16 @@ bool SRP::verify_proof(const std::string& client_M1_hex) {
 }
 
 void SRP::generate_fake_challenge() {
-    // Fake salt
     unsigned char salt_bytes[16];
     RAND_bytes(salt_bytes, sizeof(salt_bytes));
-    salt = bytes_to_hex(salt_bytes, sizeof(salt_bytes));
+    salt = HexUtils::bytes_to_hex(salt_bytes, sizeof(salt_bytes));
 
-    // v = случайное число (можно нулём)
     BN_rand(v, 256, -1, 0);
 
     generate_server_ephemeral();
 }
 
 void SRP::generate_verifier_from_proof(const std::string& A_hex, const std::string& client_M1_hex, std::string& out_salt_hex, std::string& out_verifier_hex) {
-    // Просто вызывает generate_verifier с произвольными данными, для совместимости
     generate_verifier("newuser", "newpassword", out_salt_hex, out_verifier_hex);
 }
 
@@ -153,9 +149,23 @@ std::string SRP::bn_to_hex_str(const BIGNUM* bn) const {
     return result;
 }
 
-std::string SRP::bytes_to_hex(const unsigned char* bytes, size_t len) {
-    std::ostringstream oss;
-    for (size_t i = 0; i < len; ++i)
-        oss << std::hex << std::setw(2) << std::setfill('0') << (int)bytes[i];
-    return oss.str();
+std::vector<uint8_t> SRP::get_B_bytes() const {
+    std::vector<uint8_t> bytes(128, 0); // 1024 bit = 128 bytes
+    BN_bn2binpad(B, bytes.data(), bytes.size());
+    return bytes;
+}
+
+std::vector<uint8_t> SRP::get_N_bytes() const {
+    std::vector<uint8_t> bytes(128, 0);
+    BN_bn2binpad(N, bytes.data(), bytes.size());
+    return bytes;
+}
+
+uint8_t SRP::get_generator() const {
+    return static_cast<uint8_t>(BN_get_word(g));
+}
+
+void SRP::set_A_from_bytes(const std::vector<uint8_t>& bytes) {
+    if (A) BN_free(A);
+    A = BN_bin2bn(bytes.data(), static_cast<int>(bytes.size()), nullptr);
 }
