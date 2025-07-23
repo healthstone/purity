@@ -1,6 +1,6 @@
 #include "ClientSession.hpp"
 #include "Logger.hpp"
-#include "src/server/SessionMode/authserver/reader/ReaderAuthSession.hpp"
+#include "src/server/SessionMode/authstage/reader/ReaderAuthSession.hpp"
 #include <iostream>
 
 using boost::asio::ip::tcp;
@@ -86,7 +86,7 @@ void ClientSession::process_read_buffer() {
         case SessionMode::AUTH_SESSION:
             ReaderAuthSession::process_read_buffer_as_authserver(shared_from_this());
             break;
-        case SessionMode::REALM_SESSION:
+        case SessionMode::WORK_SESSION:
             //ReaderW3GS::process_read_buffer_as_w3gs(shared_from_this());
             break;
         default:

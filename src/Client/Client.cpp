@@ -69,41 +69,18 @@ void Client::start_heartbeat() {
 }
 
 void Client::send_ping() {
-    AuthPacket ping(AuthCmd::AUTH_CMSG_PING);
+    AuthPacket ping(AuthOpcodes::CMSG_PING);
     uint32_t ping_id = GeneratorUtils::random_uint32();
     ping.write_uint32_le(ping_id);
     send_packet(ping);
-    Logger::get()->debug("[Client] Sent AUTH_CMSG_PING");
+    Logger::get()->debug("[Client] Sent CMSG_PING");
 }
 
 void Client::handle_logon_challenge() {
-    AuthPacket packet(AuthCmd::AUTH_LOGON_CHALLENGE);
-
-    //// Пример чтения в порядке протокола
-    //        uint8_t cmd = p.read_uint8_be();             // 0x00
-    //        uint8_t error = p.read_uint8_be();           // 0x01
-    //        uint16_t size = p.read_uint16_be();          // 0x02
-    //
-    //        std::string gamename = p.read_string_raw(4); // 0x04
-    //
-    //        uint8_t version1 = p.read_uint8_be();        // 0x08
-    //        uint8_t version2 = p.read_uint8_be();        // 0x09
-    //        uint8_t version3 = p.read_uint8_be();        // 0x0A
-    //
-    //        uint16_t build = p.read_uint16_be();         // 0x0B
-    //
-    //        std::string platform = p.read_string_raw(4); // 0x0D
-    //        std::string os = p.read_string_raw(4);       // 0x11
-    //        std::string country = p.read_string_raw(4);  // 0x15
-    //
-    //        uint32_t timezone = p.read_uint32_le();             // 0x19 (LE)
-    //        uint32_t ip = p.read_uint32_le();                   // 0x1D (LE)
-    //
-    //        uint8_t name_len = p.read_uint8_be();               // 0x21
-    //        std::string username = p.read_string_raw(name_len); // 0x22
+    AuthPacket packet(AuthOpcodes::CMSG_AUTH_LOGON_CHALLENGE);
     packet.write_string_nt_le("Test_user");
     send_packet(packet);
-    Logger::get()->debug("[Client] Sent AUTH_CMSG_LOGON_CHALLENGE");
+    Logger::get()->debug("[Client] Sent CMSG_AUTH_LOGON_CHALLENGE");
 }
 
 void Client::send_packet(const AuthPacket &packet) {
@@ -141,7 +118,8 @@ void Client::flush_queue() {
 }
 
 void Client::start_receive_loop() {
-    auto header = std::make_shared<std::vector<uint8_t>>(3); // [Length LE(2)][Opcode(1)]
+    // Читаем заголовок: [Opcode(2 BE)] [Length(2 BE)]
+    auto header = std::make_shared<std::vector<uint8_t>>(4);
 
     boost::asio::async_read(
             socket, boost::asio::buffer(*header),
@@ -159,43 +137,41 @@ void Client::start_receive_loop() {
                     return;
                 }
 
-                // Читаем длину пакета LE: Length = 1 (opcode) + PayloadSize
-                uint16_t length = (*header)[0] | ((*header)[1] << 8);
-                uint8_t opcode = (*header)[2];
+                // Распаковка заголовка
+                uint16_t opcode = (static_cast<uint16_t>((*header)[0]) << 8) | (*header)[1];
+                uint16_t length = (static_cast<uint16_t>((*header)[2]) << 8) | (*header)[3];
+
+                if (length > 2048) {
+                    log->error("[Client] Payload too large: {}", length);
+                    connected = false;
+                    schedule_reconnect();
+                    return;
+                }
 
                 if (length == 0) {
-                    log->error("[Client] Invalid length = 0");
-                    connected = false;
-                    schedule_reconnect();
-                    return;
-                }
+                    // Пустой payload
+                    std::vector<uint8_t> raw_packet;
+                    raw_packet.reserve(4);
+                    raw_packet.insert(raw_packet.end(), header->begin(), header->end());
 
-                uint16_t payload_size = length - 1; // Payload = Length - 1 (opcode)
-
-                if (payload_size > 2048) {
-                    log->error("[Client] Payload size too large: {}", payload_size);
-                    connected = false;
-                    schedule_reconnect();
-                    return;
-                }
-
-                if (payload_size == 0) {
                     try {
-                        AuthCmd auth_opcode = static_cast<AuthCmd>(opcode);
-                        AuthPacket p = AuthPacket::deserialize(auth_opcode, {});
-                        handle_packet(p);
+                        AuthPacket packet;
+                        packet.deserialize(raw_packet);
+                        handle_packet(packet);
                     } catch (const std::exception &ex) {
-                        log->error("[Client] Failed to parse empty packet: {}", ex.what());
+                        log->error("[Client] Failed to parse empty AuthPacket: {}", ex.what());
                     }
+
                     start_receive_loop();
                     return;
                 }
 
-                auto payload = std::make_shared<std::vector<uint8_t>>(payload_size);
+                // Иначе читаем payload
+                auto payload = std::make_shared<std::vector<uint8_t>>(length);
 
                 boost::asio::async_read(
                         socket, boost::asio::buffer(*payload),
-                        [this, payload, opcode](boost::system::error_code ec2, std::size_t) {
+                        [this, payload, header](boost::system::error_code ec2, std::size_t) {
                             auto log = Logger::get();
 
                             if (ec2) {
@@ -209,12 +185,18 @@ void Client::start_receive_loop() {
                                 return;
                             }
 
+                            // Формируем полный пакет: [Opcode(2)][Length(2)][Payload]
+                            std::vector<uint8_t> raw_packet;
+                            raw_packet.reserve(4 + payload->size());
+                            raw_packet.insert(raw_packet.end(), header->begin(), header->end());
+                            raw_packet.insert(raw_packet.end(), payload->begin(), payload->end());
+
                             try {
-                                AuthCmd auth_opcode = static_cast<AuthCmd>(opcode);
-                                AuthPacket p = AuthPacket::deserialize(auth_opcode, *payload);
-                                handle_packet(p);
+                                AuthPacket packet;
+                                packet.deserialize(raw_packet);
+                                handle_packet(packet);
                             } catch (const std::exception &ex) {
-                                log->error("[Client] Failed to parse packet: {}", ex.what());
+                                log->error("[Client] Failed to parse AuthPacket: {}", ex.what());
                             }
 
                             start_receive_loop();
@@ -222,24 +204,22 @@ void Client::start_receive_loop() {
             });
 }
 
-
 void Client::handle_packet(AuthPacket &p) {
     auto log = Logger::get();
 
-    switch (p.cmd()) {
-        case AuthCmd::AUTH_SMSG_PONG:
-            log->debug("[Client] Received AUTH_SMSG_PONG");
+    switch (p.get_opcode()) {
+        case AuthOpcodes::SMSG_PONG:
+            log->debug("[Client] Received SMSG_PONG");
             break;
 
-        case AuthCmd::AUTH_LOGON_CHALLENGE: {
-            std::string salt = p.read_string_nt_le();
-            std::string public_b = p.read_string_nt_le();
-            log->debug("[Client] Received AUTH_SMSG_LOGON_CHALLENGE: salt={}, public_B={}", salt, public_b);
+        case AuthOpcodes::SMSG_AUTH_LOGON_CHALLENGE: {
+            uint32_t someuint32 = p.read_uint32_le();
+            log->debug("[Client] Received SMSG_AUTH_LOGON_CHALLENGE with uint32_t={}", someuint32);
             break;
         }
 
         default:
-            log->warn("[Client] Unknown opcode: {}", static_cast<uint8_t>(p.cmd()));
+            log->warn("[Client] Unknown opcode: {}", static_cast<uint16_t>(p.get_opcode()));
             break;
     }
 }

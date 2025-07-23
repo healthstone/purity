@@ -1,5 +1,5 @@
 #include "src/server/ClientSession/ClientSession.hpp"
-#include "src/server/SessionMode/authserver/opcodes/AuthCmd.hpp"
+#include "src/server/SessionMode/authstage/opcodes/AuthOpcodes.hpp"
 
 namespace ReaderAuthSession {
 

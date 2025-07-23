@@ -9,13 +9,13 @@
 #include "src/server/Server.hpp"
 #include "MessageBuffer.hpp"
 #include "packet/Packet.hpp"
-#include "src/server/SessionMode/authserver/entity/AuthSession.hpp"
+#include "src/server/SessionMode/authstage/entity/AuthSession.hpp"
 
 class Server; // forward declaration
 
 enum class SessionMode {
     AUTH_SESSION,
-    REALM_SESSION
+    WORK_SESSION
 };
 
 class ClientSession : public std::enable_shared_from_this<ClientSession> {
@@ -56,6 +56,7 @@ private:
 
     boost::asio::ip::tcp::socket socket_;
     std::shared_ptr<Server> server_;
+    std::shared_ptr<AuthSession> authSession_;
 
     MessageBuffer read_buffer_;
 
@@ -64,7 +65,4 @@ private:
     std::atomic<bool> closed_{false};
 
     SessionMode session_mode_ = SessionMode::AUTH_SESSION;
-
-    // PvPGN
-    std::shared_ptr<AuthSession> authSession_;
 };

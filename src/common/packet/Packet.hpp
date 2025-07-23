@@ -18,13 +18,15 @@ public:
     virtual ~Packet() = default;
 
     ByteBuffer& raw() { return buffer_; }
-    virtual std::vector<uint8_t> build_packet() const = 0;
     const std::vector<uint8_t>& serialize() const { return buffer_.data(); }
+
+    virtual std::vector<uint8_t> build_packet() const = 0;
+    virtual void deserialize(const std::vector<uint8_t>& raw_data) = 0;
 
     static void log_raw_payload(
             const std::string& opcode,
             const std::vector<uint8_t>& payload,
-            const std::string& prefix = "[Packet] RAW DUMP")
+            const std::string& prefix = "[Packet] DUMP")
     {
         std::string hex_dump;
         hex_dump.reserve(payload.size() * 3);
@@ -32,7 +34,7 @@ public:
             fmt::format_to(std::back_inserter(hex_dump), "{:02X} ", b);
         }
 
-        std::string log_message = fmt::format("{} opcode ID: {} ({} bytes) Payload: {}",
+        std::string log_message = fmt::format("{} opcode ID: {} ({} bytes) RAW: {}",
                                               prefix,
                                               opcode,
                                               payload.size(),

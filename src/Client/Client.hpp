@@ -4,7 +4,7 @@
 #include <queue>
 #include <string>
 #include <vector>
-#include "src/server/SessionMode/authserver/opcodes/AuthPacket.hpp"
+#include "src/server/SessionMode/authstage/opcodes/AuthPacket.hpp"
 
 class Client {
 public:

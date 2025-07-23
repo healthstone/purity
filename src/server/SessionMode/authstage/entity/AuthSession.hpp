@@ -11,7 +11,4 @@ public:
 
 private:
     std::shared_ptr<SRP6> srp_ = std::make_shared<SRP6>();
-
-    std::string salt_;
-    std::string verifier_;
 };

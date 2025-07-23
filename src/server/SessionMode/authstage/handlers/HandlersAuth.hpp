@@ -1,5 +1,5 @@
 #include "src/server/ClientSession/ClientSession.hpp"
-#include "src/server/SessionMode/authserver/opcodes/AuthPacket.hpp"
+#include "src/server/SessionMode/authstage/opcodes/AuthPacket.hpp"
 
 namespace HandlersAuth {
     void dispatch(std::shared_ptr<ClientSession> session, AuthPacket &p);
