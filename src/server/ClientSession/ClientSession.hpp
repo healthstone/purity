@@ -9,13 +9,13 @@
 #include "src/server/Server.hpp"
 #include "MessageBuffer.hpp"
 #include "packet/Packet.hpp"
-#include "src/server/SessionMode/bncs/entity/account/BNCSAccount.hpp"
+#include "src/server/SessionMode/authstage/entity/AuthSession.hpp"
 
 class Server; // forward declaration
 
 enum class SessionMode {
-    BNCS,
-    W3ROUTE
+    AUTH_SESSION,
+    WORK_SESSION
 };
 
 class ClientSession : public std::enable_shared_from_this<ClientSession> {
@@ -34,16 +34,16 @@ public:
 
     std::shared_ptr<Server> server() const { return server_; }
 
-    // Режим: BNCS или W3ROUTE
+    // Режим: AUTH или WORK
     void set_session_mode(SessionMode mode) { session_mode_ = mode; }
 
     SessionMode get_session_mode() const { return session_mode_; }
 
-    MessageBuffer& read_buffer() {
+    MessageBuffer &read_buffer() {
         return read_buffer_;
     }
 
-    BNCSAccount* getBNCSAccount() { return bncsAccount_.get(); }
+    AuthSession *getAuthSession() { return authSession_.get(); }
 
 private:
     void do_read();
@@ -56,6 +56,7 @@ private:
 
     boost::asio::ip::tcp::socket socket_;
     std::shared_ptr<Server> server_;
+    std::shared_ptr<AuthSession> authSession_;
 
     MessageBuffer read_buffer_;
 
@@ -63,8 +64,5 @@ private:
     bool writing_ = false;
     std::atomic<bool> closed_{false};
 
-    SessionMode session_mode_ = SessionMode::BNCS;
-
-    // PvPGN
-    std::shared_ptr<BNCSAccount> bncsAccount_;
+    SessionMode session_mode_ = SessionMode::AUTH_SESSION;
 };

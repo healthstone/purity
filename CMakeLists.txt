@@ -18,7 +18,7 @@ set(SPDLOG_DIR ${CMAKE_SOURCE_DIR}/deps/spdlog-1.15.3)
 add_subdirectory(${SPDLOG_DIR})
 
 file(GLOB_RECURSE COMMON_SOURCES CONFIGURE_DEPENDS src/common/*.cpp)
-file(GLOB_RECURSE CLIENT_SOURCES CONFIGURE_DEPENDS src/ClientBNCS/*.cpp)
+file(GLOB_RECURSE CLIENT_SOURCES CONFIGURE_DEPENDS src/Client/*.cpp)
 file(GLOB_RECURSE SERVER_SOURCES CONFIGURE_DEPENDS src/server/*.cpp)
 file(GLOB_RECURSE TEST_SOURCES CONFIGURE_DEPENDS tests/*.cpp)
 
@@ -31,6 +31,7 @@ set(COMMON_INCLUDE_DIRS
 add_executable(client
         src/main_client.cpp
         ${CLIENT_SOURCES}
+        ${COMMON_SOURCES}
 )
 
 target_link_libraries(client PRIVATE
@@ -70,8 +71,9 @@ target_include_directories(server PRIVATE
 
 # === Тесты ===
 add_executable(tests
-        tests/ByteBufferTest.cpp
+        tests/tests_main.cpp
         ${TEST_SOURCES}
+        ${COMMON_SOURCES}
 )
 
 target_link_libraries(tests PRIVATE
@@ -79,7 +81,6 @@ target_link_libraries(tests PRIVATE
         Catch2::Catch2WithMain
         OpenSSL::Crypto
         spdlog::spdlog
-        ${COMMON_SOURCES}  # Линкуем общие исходники
 )
 
 target_include_directories(tests PRIVATE

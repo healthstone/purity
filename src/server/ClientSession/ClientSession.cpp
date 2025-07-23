@@ -1,7 +1,7 @@
 #include "ClientSession.hpp"
 #include "Logger.hpp"
-#include "src/server/SessionMode/bncs/reader/ReaderBNCS.hpp"
-#include "src/server/SessionMode/w3gs/reader/ReaderW3GS.hpp"
+#include "src/server/SessionMode/authstage/reader/ReaderAuthSession.hpp"
+#include "src/server/SessionMode/workstage/reader/ReaderWorkSession.hpp"
 #include <iostream>
 
 using boost::asio::ip::tcp;
@@ -9,7 +9,7 @@ using boost::asio::ip::tcp;
 ClientSession::ClientSession(tcp::socket socket, std::shared_ptr<Server> server)
         : socket_(std::move(socket)), server_(std::move(server)), read_buffer_(4096) {
     // создаем класс с bncs аккаунтом
-    bncsAccount_ = std::make_shared<BNCSAccount>();
+    authSession_ = std::make_shared<AuthSession>();
 }
 
 void ClientSession::start() {
@@ -17,7 +17,7 @@ void ClientSession::start() {
     Logger::get()->debug("[client_session][start] New connection from {}:{}",
                          ep.address().to_string(), ep.port());
 
-    set_session_mode(SessionMode::BNCS);  // Начинаем с BNCS
+    set_session_mode(SessionMode::AUTH_SESSION);  // Начинаем с AUTH_SESSION
     do_read();
 }
 
@@ -84,11 +84,11 @@ void ClientSession::do_read() {
 
 void ClientSession::process_read_buffer() {
     switch (session_mode_) {
-        case SessionMode::BNCS:
-            ReaderBNCS::process_read_buffer_as_bncs(shared_from_this());
+        case SessionMode::AUTH_SESSION:
+            ReaderAuthSession::process_read_buffer_as_authserver(shared_from_this());
             break;
-        case SessionMode::W3ROUTE:
-            ReaderW3GS::process_read_buffer_as_w3gs(shared_from_this());
+        case SessionMode::WORK_SESSION:
+            ReaderWorkSession::process_read_buffer_as_workserver(shared_from_this());
             break;
         default:
             Logger::get()->error("[client_session][process_read_buffer] Unknown session mode!");

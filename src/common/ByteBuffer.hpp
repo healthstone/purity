@@ -7,6 +7,7 @@
 #include <stdexcept>
 #include <sstream>
 #include <iomanip>
+#include <algorithm> // для std::reverse
 #include <endian.h>
 #include "Logger.hpp"
 
@@ -17,9 +18,10 @@ public:
 
     // ==================== WRITE METHODS ====================
 
+    void write_uint8(uint8_t value) { buffer_.push_back(value); }
+    void write_int8(int8_t value) { buffer_.push_back(static_cast<uint8_t>(value)); }
+
     // ---------- Big-Endian ----------
-    void write_uint8_be(uint8_t value) { buffer_.push_back(value); }
-    void write_int8_be(int8_t value) { buffer_.push_back(static_cast<uint8_t>(value)); }
 
     void write_uint16_be(uint16_t value) {
         uint16_t be = htobe16(value);
@@ -54,8 +56,6 @@ public:
     }
 
     // ---------- Little-Endian ----------
-    void write_uint8_le(uint8_t value) { buffer_.push_back(value); }
-    void write_int8_le(int8_t value) { buffer_.push_back(static_cast<uint8_t>(value)); }
 
     void write_uint16_le(uint16_t value) {
         uint16_t le = htole16(value);
@@ -93,13 +93,64 @@ public:
     void write_bool(bool value) { buffer_.push_back(value ? 1 : 0); }
 
     // ---------- Strings ----------
-    void write_string_nt(const std::string& str) {
+
+    // Raw string write/read BE (as is)
+    void write_string_raw_be(const std::string& str) {
         write_bytes(reinterpret_cast<const uint8_t*>(str.data()), str.size());
-        write_uint8_be(0x00); // Null-terminator
     }
 
-    void write_string_raw(const std::string& str) {
-        write_bytes(reinterpret_cast<const uint8_t*>(str.data()), str.size());
+    std::string read_string_raw_be(size_t length) {
+        check_read(length, ReadSource::READ_STRING_RAW);
+        std::string str(reinterpret_cast<const char*>(&buffer_[read_pos_]), length);
+        read_pos_ += length;
+        return str;
+    }
+
+    // Raw string write/read LE (reversed)
+    void write_string_raw_le(const std::string& str) {
+        std::string reversed_str(str.rbegin(), str.rend());
+        write_bytes(reinterpret_cast<const uint8_t*>(reversed_str.data()), reversed_str.size());
+    }
+
+    std::string read_string_raw_le(size_t length) {
+        check_read(length, ReadSource::READ_STRING_RAW);
+        std::string str(reinterpret_cast<const char*>(&buffer_[read_pos_]), length);
+        read_pos_ += length;
+        std::reverse(str.begin(), str.end());
+        return str;
+    }
+
+    // Null-terminated string write/read BE (write as is + '\0', read until '\0')
+    void write_string_nt_be(const std::string& str) {
+        write_string_raw_be(str);
+        write_uint8(0x00); // null terminator
+    }
+
+    std::string read_string_nt_be() {
+        std::string str;
+        while (read_pos_ < buffer_.size()) {
+            char c = static_cast<char>(buffer_[read_pos_++]);
+            if (c == '\0') break;
+            str += c;
+        }
+        return str;
+    }
+
+    // Null-terminated string write/read LE (reverse string, write + '\0', read reversed and flip)
+    void write_string_nt_le(const std::string& str) {
+        write_string_raw_le(str);
+        write_uint8(0x00); // null terminator
+    }
+
+    std::string read_string_nt_le() {
+        std::string str;
+        while (read_pos_ < buffer_.size()) {
+            char c = static_cast<char>(buffer_[read_pos_++]);
+            if (c == '\0') break;
+            str += c;
+        }
+        std::reverse(str.begin(), str.end());
+        return str;
     }
 
     // ---------- Bytes ----------
@@ -115,11 +166,11 @@ public:
 
     // ==================== READ METHODS ====================
 
-    uint8_t read_uint8_be() {
-        check_read(sizeof(uint8_t), ReadSource::READ_UINT8_BE);
+    uint8_t read_uint8() {
+        check_read(sizeof(uint8_t), ReadSource::READ_UINT8);
         return buffer_[read_pos_++];
     }
-    int8_t read_int8_be() { return static_cast<int8_t>(read_uint8_be()); }
+    int8_t read_int8() { return static_cast<int8_t>(read_uint8()); }
 
     uint16_t read_uint16_be() {
         check_read(sizeof(uint16_t), ReadSource::READ_UINT16_BE);
@@ -161,12 +212,6 @@ public:
         std::memcpy(&value, &int_val, sizeof(value));
         return value;
     }
-
-    uint8_t read_uint8_le() {
-        check_read(sizeof(uint8_t), ReadSource::READ_UINT8_LE);
-        return buffer_[read_pos_++];
-    }
-    int8_t read_int8_le() { return static_cast<int8_t>(read_uint8_le()); }
 
     uint16_t read_uint16_le() {
         check_read(sizeof(uint16_t), ReadSource::READ_UINT16_LE);
@@ -211,24 +256,7 @@ public:
 
     bool read_bool() {
         check_read(sizeof(uint8_t), ReadSource::READ_BOOL);
-        return read_uint8_be() != 0;
-    }
-
-    std::string read_string_nt() {
-        std::string str;
-        while (read_pos_ < buffer_.size()) {
-            char c = static_cast<char>(buffer_[read_pos_++]);
-            if (c == '\0') break;
-            str += c;
-        }
-        return str;
-    }
-
-    std::string read_string_raw(size_t length) {
-        check_read(length, ReadSource::READ_STRING_RAW);
-        std::string str(reinterpret_cast<const char*>(&buffer_[read_pos_]), length);
-        read_pos_ += length;
-        return str;
+        return read_uint8() != 0;
     }
 
     std::vector<uint8_t> read_bytes(size_t length) {
@@ -260,28 +288,28 @@ public:
 
 private:
     enum class ReadSource {
-        READ_UINT8_BE,
+        READ_UINT8,
+        READ_INT8,
+
         READ_UINT16_BE,
         READ_UINT32_BE,
         READ_UINT64_BE,
-        READ_INT8_BE,
         READ_INT16_BE,
         READ_INT32_BE,
         READ_INT64_BE,
         READ_FLOAT_BE,
         READ_DOUBLE_BE,
-        READ_UINT8_LE,
+
         READ_UINT16_LE,
         READ_UINT32_LE,
         READ_UINT64_LE,
-        READ_INT8_LE,
         READ_INT16_LE,
         READ_INT32_LE,
         READ_INT64_LE,
         READ_FLOAT_LE,
         READ_DOUBLE_LE,
+
         READ_BOOL,
-        READ_STRING_NT,
         READ_STRING_RAW,
         READ_BYTES,
         SKIP,
@@ -291,28 +319,25 @@ private:
 
     static const char* read_source_to_string(ReadSource source) {
         switch (source) {
-            case ReadSource::READ_UINT8_BE: return "read_uint8_be";
+            case ReadSource::READ_UINT8: return "read_uint8";
+            case ReadSource::READ_INT8: return "read_int8";
             case ReadSource::READ_UINT16_BE: return "read_uint16_be";
             case ReadSource::READ_UINT32_BE: return "read_uint32_be";
             case ReadSource::READ_UINT64_BE: return "read_uint64_be";
-            case ReadSource::READ_INT8_BE: return "read_int8_be";
             case ReadSource::READ_INT16_BE: return "read_int16_be";
             case ReadSource::READ_INT32_BE: return "read_int32_be";
             case ReadSource::READ_INT64_BE: return "read_int64_be";
             case ReadSource::READ_FLOAT_BE: return "read_float_be";
             case ReadSource::READ_DOUBLE_BE: return "read_double_be";
-            case ReadSource::READ_UINT8_LE: return "read_uint8_le";
             case ReadSource::READ_UINT16_LE: return "read_uint16_le";
             case ReadSource::READ_UINT32_LE: return "read_uint32_le";
             case ReadSource::READ_UINT64_LE: return "read_uint64_le";
-            case ReadSource::READ_INT8_LE: return "read_int8_le";
             case ReadSource::READ_INT16_LE: return "read_int16_le";
             case ReadSource::READ_INT32_LE: return "read_int32_le";
             case ReadSource::READ_INT64_LE: return "read_int64_le";
             case ReadSource::READ_FLOAT_LE: return "read_float_le";
             case ReadSource::READ_DOUBLE_LE: return "read_double_le";
             case ReadSource::READ_BOOL: return "read_bool";
-            case ReadSource::READ_STRING_NT: return "read_string_nt";
             case ReadSource::READ_STRING_RAW: return "read_string_raw";
             case ReadSource::READ_BYTES: return "read_bytes";
             case ReadSource::SKIP: return "skip";
