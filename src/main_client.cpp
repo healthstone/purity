@@ -32,7 +32,7 @@ int main() {
     // Настраиваем сигнал Ctrl+C
     boost::asio::signal_set signals(io, SIGINT, SIGTERM);
     signals.async_wait([&](const boost::system::error_code &, int) {
-        Logger::get()->info("[Main] Caught signal. Disconnecting client_bncs...");
+        Logger::get()->info("[Main] Caught signal. Disconnecting ...");
         client->disconnect();
 
         // Останавливаем io_context после graceful shutdown
