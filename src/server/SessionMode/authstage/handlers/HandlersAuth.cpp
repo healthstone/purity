@@ -1,9 +1,9 @@
 #include "HandlersAuth.hpp"
 
 #include <utility>
-#include "packet/PacketUtils.hpp"
 #include "src/server/SessionMode/authstage/opcodes/AuthPacket.hpp"
-#include "generators/GeneratorUtils.hpp"
+#include "utils/PacketUtils.hpp"
+#include "utils/generators/GeneratorUtils.hpp"
 
 using namespace HandlersAuth;
 

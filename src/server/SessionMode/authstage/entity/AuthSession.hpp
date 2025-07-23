@@ -1,6 +1,6 @@
 #include <cstdint>
 #include <memory>
-#include "SRP6.hpp"
+#include "srp6/SRP6.hpp"
 
 class AuthSession {
 public:

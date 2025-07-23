@@ -1,5 +1,5 @@
 #include <catch2/catch.hpp>
-#include "ByteBuffer.hpp"
+#include "packet/ByteBuffer.hpp"
 
 TEST_CASE("ByteBuffer integer BE/LE read/write") {
     ByteBuffer buf;

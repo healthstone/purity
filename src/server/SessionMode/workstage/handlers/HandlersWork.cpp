@@ -1,7 +1,7 @@
 #include "HandlersWork.hpp"
 
 #include <utility>
-#include "packet/PacketUtils.hpp"
+#include "utils/PacketUtils.hpp"
 #include "src/server/SessionMode/workstage/opcodes/WorkPacket.hpp"
 
 using namespace HandlersWork;

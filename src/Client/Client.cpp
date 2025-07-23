@@ -1,6 +1,6 @@
 #include "Client.hpp"
 #include "Logger.hpp"
-#include "generators/GeneratorUtils.hpp"
+#include "utils/generators/GeneratorUtils.hpp"
 #include <utility>
 
 using boost::asio::ip::tcp;

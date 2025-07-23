@@ -1,6 +1,6 @@
 #include <catch2/catch.hpp>
 
-#include "SRP6.hpp"
+#include "srp6/SRP6.hpp"
 #include <openssl/bn.h>
 #include <openssl/sha.h>
 #include <openssl/rand.h>

@@ -7,7 +7,7 @@
 #include <atomic>
 
 #include "src/server/Server.hpp"
-#include "MessageBuffer.hpp"
+#include "packet/MessageBuffer.hpp"
 #include "packet/Packet.hpp"
 #include "src/server/SessionMode/authstage/entity/AuthSession.hpp"
 
