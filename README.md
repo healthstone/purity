@@ -4,24 +4,34 @@ This C++ project implements a **Asynchronous server** using **Boost.Asio**, a cu
 
 ## Key Components
 
-### ✅ **Session Mode**
-- Contains a **HandlersBNCS** and **ReaderBNCS** that routes packets for BNCS structure: `[ID][Length][Payload] (and some with [ID][Payload] structure)`
-- Contains a **HandlersW3GS** and **ReaderW3GS** that routes packets for W3GS structure: `[Opcode_LE][Length][Payload]`
-- Easy way for create your own style or repeat another, for example World of Warcraft style: `[2 bytes Length][2 bytes Opcode][Payload]`
+### 🧩 **Session Modes**
 
-```
-You can read and write each field in packet as you need:
-- BE = Big Endian
-- LE = Little Endian
-Payload — Binary data, encoded with your custom ByteBuffer.
-```
+The server supports **multi-stage session modes** to switch between authentication and work phases:
+
+- **AUTH_SESSION**
+    - Packet format: `[Opcode (1 byte)][Length (2 bytes BE)][Payload]`
+    - Used for authentication handshake (SRP).
+    - Example opcodes: `CMSG_AUTH_LOGON_CHALLENGE`, `CMSG_PING`.
+
+- **WORK_SESSION**
+    - Packet format: `[Opcode (2 bytes BE)][Length (2 bytes BE)][Payload]`
+    - Used for post-auth gameplay or chat.
+    - Example opcodes: `CMSG_PING`, `CMSG_MESSAGE`.
+
+**Note:**
+- `BE` = Big Endian for network consistency.
+- Payloads are binary buffers encoded with a custom `ByteBuffer`.
+- The **Client** auto-switches session mode (e.g., from `AUTH_SESSION` to `WORK_SESSION`) after receiving `SMSG_AUTH_LOGON_PROOF`.
+
+---
 
 - For each SessionMode you can create child of Packet with new structure. All methods (read_uint8, write_uint8 and etc... ) already exist and tested by ByteBufferTest
 
-### ✅ **Handlers** (`Handlers.cpp`)
-- Contains a **dispatch system** that routes packets by opcode.
-- Handles `PING`, `CHAT_MESSAGE` and `ACCOUNT_LOOKUP_BY_NAME` opcodes.
-- Runs `ACCOUNT_LOOKUP_BY_NAME` as a coroutine to execute blocking DB logic in a safe worker thread pool.
+### ⚙️ **Packet Handlers**
+
+- `HandlersAuth` and `HandlersWork` dispatch packets by opcode.
+- All packets have an async `dispatch` system for routing.
+- For DB operations (e.g., account lookups), blocking calls run safely in worker threads, responses marshal back to the I/O thread.
 
 ### ✅ **ClientSession** (`ClientSession.cpp`)
 - Owns a TCP socket and buffers.
