@@ -29,9 +29,9 @@ void HandlersAuth::dispatch(std::shared_ptr<ClientSession> session, AuthPacket &
             );
             break;
 
-//        case AuthCmd::AUTH_CMSG_LOGON_PROOF:
-//            handle_logon_proof(std::move(session), p);
-//            break;
+        case AuthCmd::AUTH_LOGON_PROOF:
+            handle_logon_proof(std::move(session), p);
+            break;
 //
 //        case AuthCmd::AUTH_CMSG_RECONNECT_CHALLENGE:
 //            handle_reconnect_challenge(std::move(session), p);
@@ -139,64 +139,57 @@ HandlersAuth::handle_logon_challenge(std::shared_ptr<ClientSession> session, Aut
         stmt.set_param(0, username);
 
         auto user = session->server()->db()->execute_sync<AccountsRow>(stmt);
-        if (user) {
-            log->info("[HandlersAuth] User '{}' found.", username);
 
-            auto auth = session->getAuthSession();
-            // Загружаем salt и verifier из AuthSession (предполагается, что они уже есть)
-            std::string salt = user->salt.value();            // salt в hex формате
-            std::string verifier = user->verifier.value();    // verifier в hex формате
-
-            if (salt.empty() || verifier.empty()) {
-                log->error("[HandlersAuth] AUTH_CMSG_LOGON_CHALLENGE - No salt or verifier found for user '{}'",
-                           username);
-
-                AuthPacket reply(AuthCmd::AUTH_LOGON_CHALLENGE);
-                reply.write_uint8(0);
-                reply.write_uint8(WOW_FAIL_INCORRECT_PASSWORD);
-                PacketUtils::send_packet_as<AuthPacket>(std::move(session), reply);
-                co_return;
-            }
-
-            // Загружаем salt и verifier в SRP
-            auto srp = auth->srp();
-            srp->load_verifier(salt, verifier);
-
-            // Генерируем серверный публичный ключ B на основе текущего verifier
-            srp->generate_server_ephemeral();
-
-            // salt, verifier (B), N — передаются как бинарные массивы, не как строки
-            auto salt_bin = HexUtils::hex_to_bytes(salt);        // salt - бинарный массив
-            auto B_bin = srp->get_B_bytes();                     // публичный ключ B, бинарный массив
-            auto N_bin = srp->get_N_bytes();                     // простое число N, бинарный массив
-            uint8_t g = srp->get_generator();                    // обычно 7
-
-            AuthPacket reply(AuthCmd::AUTH_LOGON_CHALLENGE);
-            reply.write_uint8(0);                       // error byte
-            reply.write_uint8(WOW_SUCCESS);             // success = 0
-
-            reply.write_bytes(B_bin);                   // 32 байта B
-            reply.write_uint8(1);                       // param marker
-            reply.write_uint8(g);                       // 1 байт g
-            reply.write_uint8(32);                      // length(N)
-            reply.write_bytes(N_bin);                   // 32 байта N
-            reply.write_bytes(salt_bin);                // 32 байта salt
-            reply.write_bytes(VersionChallenge.data(), VersionChallenge.size()); // 16 байт
-            reply.write_uint8(0);           // 1 байт
-
-            PacketUtils::send_packet_as<AuthPacket>(std::move(session), reply);
-        } else {
-            log->error("[HandlersAuth] User '{}' not founded", username);
-            // УЗ не найдена: отправить отказ
+        if (!user) {
+            log->error("[HandlersAuth] User '{}' not found", username);
             AuthPacket reply(AuthCmd::AUTH_LOGON_CHALLENGE);
             reply.write_uint8(0);
             reply.write_uint8(WOW_FAIL_NO_GAME_ACCOUNT);
             PacketUtils::send_packet_as<AuthPacket>(std::move(session), reply);
+            co_return;
         }
+
+        // --- Проверка salt и verifier ---
+        if (!user->salt.has_value() || !user->verifier.has_value() ||
+            user->salt->size() != 32 || user->verifier->size() != 32) {
+            log->error("[HandlersAuth] User '{}' has invalid salt/verifier length", username);
+            AuthPacket reply(AuthCmd::AUTH_LOGON_CHALLENGE);
+            reply.write_uint8(0);
+            reply.write_uint8(WOW_FAIL_INCORRECT_PASSWORD);
+            PacketUtils::send_packet_as<AuthPacket>(std::move(session), reply);
+            co_return;
+        }
+
+        // --- Инициализация SRP ---
+        auto auth = session->getAuthSession();
+        auto srp = auth->srp();
+
+        srp->load_verifier(*user->salt, *user->verifier);
+        srp->generate_server_ephemeral();
+
+        // --- Определение securityFlags ---
+        uint8_t securityFlags = 0;
+        // TODO: если есть TOTP или другие методы аутентификации - выставить securityFlags
+
+        // --- Формирование ответа ---
+        AuthPacket reply(AuthCmd::AUTH_LOGON_CHALLENGE);
+        reply.write_uint8(0);              // error byte = 0 (success)
+
+        reply.write_bytes(srp->get_B_bytes());          // 32 байта B (публичный ключ сервера)
+        //reply.write_uint8(1);                            // param marker = 1
+        reply.write_uint8(srp->get_generator());        // 1 байт g
+        //reply.write_uint8(32);                           // length(N) = 32
+        reply.write_bytes(srp->get_N_bytes());          // 32 байта N (большое простое число)
+        reply.write_bytes(*user->salt);                  // 32 байта salt
+        reply.write_bytes(VersionChallenge.data(), VersionChallenge.size()); // 16 байт версии клиента
+        reply.write_uint8(securityFlags);                // security flags
+
+        // Если securityFlags != 0, можно добавить дополнительные поля, как в TrinityCore (необязательно)
+
+        PacketUtils::send_packet_as<AuthPacket>(std::move(session), reply);
         co_return;
     } catch (const std::exception& ex) {
-        log->error("[HandlersAuth] AUTH_CMSG_LOGON_CHALLENGE - couldn't read the package fields {}", ex.what());
-        // Формируем ответ
+        log->error("[HandlersAuth] handle_logon_challenge exception: {}", ex.what());
         AuthPacket reply(AuthCmd::AUTH_LOGON_CHALLENGE);
         reply.write_uint8(0);
         reply.write_uint8(WOW_FAIL_DISCONNECTED);
@@ -205,30 +198,62 @@ HandlersAuth::handle_logon_challenge(std::shared_ptr<ClientSession> session, Aut
     }
 }
 
-//void HandlersAuth::handle_logon_proof(std::shared_ptr<ClientSession> session, AuthPacket &p) {
-//    auto log = Logger::get();
+void HandlersAuth::handle_logon_proof(std::shared_ptr<ClientSession> session, AuthPacket &p) {
+    auto log = Logger::get();
+    log->info("[handler] AUTH_CMSG_LOGON_PROOF");
+
+//    try{
+//        // Читаем 32 байта ключа A
+//        auto A_bytes = p.read_bytes(32);
+//        // Читаем 20 байт clientM
+//        auto clientM_bytes = p.read_bytes(20);
+//        // Читаем 20 байт crc_hash
+//        auto crc_bytes = p.read_bytes(20);
+//        // Читаем number_of_keys (1 байт)
+//        uint8_t number_of_keys = p.read_uint8();
+//        uint8_t securityFlags = p.read_uint8();
 //
-//    std::string A_hex = p.read_string();
-//    std::string client_M1 = p.read_string();
+//        // Получаем auth и SRP для сессии
+//        auto auth = session->getAuthSession();
+//        auto srp = auth->srp();
 //
-//    log->info("[handler] AUTH_CMSG_LOGON_PROOF A={}, M1={}", A_hex, client_M1);
+//        // Проверяем SRP: загружаем verifier и salt (уже должны быть)
+//        // srp->load_verifier(*user->salt, *user->verifier);
+//        // srp->generate_server_ephemeral(); -- уже были вызваны ранее на этапе challenge
 //
-//    auto srp = session->srp;
-//    if (!srp) {
-//        log->error("[handler] No SRP context in session");
-//        return;
+//        // Проверяем client proof (clientM)
+//        if (!srp->verify_client_proof(A_bytes, clientM_bytes)) {
+//            // Если proof не совпал - отправляем отказ
+//            AuthPacket failReply(AuthCmd::AUTH_LOGON_PROOF);
+//            failReply.write_uint8(WOW_FAIL_UNKNOWN_ACCOUNT);
+//            failReply.write_uint16(0); // LoginFlags
+//            PacketUtils::send_packet_as<AuthPacket>(std::move(session), failReply);
+//
+//            log->warn("Authentication failed: SRP client proof mismatch for session {}", session->id());
+//            return;
+//        }
+//
+//        // Получаем session key из SRP после успешной проверки
+//        auto sessionKey = srp->get_session_key();
+//        auth->setSessionKey(sessionKey);
+//
+//        // TODO: здесь можно проверить crc_hash, securityFlags, number_of_keys и др.
+//
+//        // Формируем ответ успешного логина, например вычисляем M2 (server proof)
+//        auto M2 = srp->get_server_proof(A_bytes, clientM_bytes, sessionKey);
+//
+//        // Формируем пакет ответа
+//        AuthPacket successReply(AuthCmd::AUTH_LOGON_PROOF);
+//        successReply.write_bytes(M2.data(), M2.size()); // M2 - 20 байт SHA1 digest
+//        successReply.write_uint8(0); // error = 0 (успех)
+//
+//        PacketUtils::send_packet_as<AuthPacket>(std::move(session), successReply);
+//        log->info("User session authenticated successfully");
 //    }
-//
-//    srp->process_client_public(A_hex);
-//
-//    bool verified = srp->verify_proof(client_M1);
-//    log->info("[handler] SRP proof verified: {}", verified);
-//
-//    AuthPacket reply(AuthCmd::AUTH_SMSG_LOGON_PROOF);
-//    reply.write_uint8(verified ? 0x00 : 0x0C);  // 0x00 = success, 0x0C = fail
-//
-//    PacketUtils::send_packet_as<AuthPacket>(std::move(session), reply);
-//}
+//    catch (const std::exception& e) {
+//        log->error("Exception in handle_logon_proof: {}", e.what());
+//    }
+}
 //
 //void HandlersAuth::handle_reconnect_challenge(std::shared_ptr<ClientSession> session, AuthPacket &p) {
 //    auto log = Logger::get();
