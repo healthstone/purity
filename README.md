@@ -67,9 +67,10 @@ The server supports **multi-stage session modes** to switch between authenticati
 
 ## How to Extend
 
-- Add new opcodes in `Handlers.cpp`.
-- Add new prepared statements in your DB class.
-- Extend `SRP` for real client proof validation.
+- Add new **opcodes** in `HandlersAuth` or `HandlersWork`.
+- Add new SQL prepared statements in your DB class.
+- Extend `SRP` for real password verification.
+- Add new session modes if needed (copy `AUTH_SESSION` structure).
 
 ## 📦 Configuration via Environment Variables
 
