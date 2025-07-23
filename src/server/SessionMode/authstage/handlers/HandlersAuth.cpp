@@ -29,7 +29,7 @@ void HandlersAuth::dispatch(std::shared_ptr<ClientSession> session, AuthPacket &
             break;
 
         default:
-            Logger::get()->warn("[handler] Unknown opcode: {}", static_cast<uint8_t>(opcode));
+            Logger::get()->warn("[HandlersAuth] Unknown opcode: {}", static_cast<uint8_t>(opcode));
             break;
     }
 }
@@ -51,7 +51,7 @@ boost::asio::awaitable<void>
 HandlersAuth::handle_logon_challenge(std::shared_ptr<ClientSession> session, AuthPacket &p) {
     auto log = Logger::get();
     std::string username = p.read_string_nt_le();
-    log->info("[handler] CMSG_AUTH_LOGON_CHALLENGE with user {}", username);
+    log->info("[HandlersAuth] CMSG_AUTH_LOGON_CHALLENGE with user {}", username);
 
     AuthPacket reply(AuthOpcodes::SMSG_AUTH_LOGON_CHALLENGE);
     uint32_t randomUint32 = GeneratorUtils::random_uint32();
@@ -62,5 +62,10 @@ HandlersAuth::handle_logon_challenge(std::shared_ptr<ClientSession> session, Aut
 
 void HandlersAuth::handle_logon_proof(std::shared_ptr<ClientSession> session, AuthPacket &p) {
     auto log = Logger::get();
-    log->info("[handler] CMSG_AUTH_LOGON_PROOF");
+    log->info("[HandlersAuth] CMSG_AUTH_LOGON_PROOF");
+
+    session->set_session_mode(SessionMode::WORK_SESSION);
+
+    AuthPacket reply(AuthOpcodes::SMSG_AUTH_LOGON_PROOF);
+    PacketUtils::send_packet_as<AuthPacket>(std::move(session), reply);
 }

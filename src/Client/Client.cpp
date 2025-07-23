@@ -44,7 +44,7 @@ void Client::disconnect() {
         }
 
         connected = false;
-        Logger::get()->info("[Client] Disconnected from server (disconnect())");
+        Logger::get()->info("[Client] Disconnected from server");
     });
 }
 
@@ -63,16 +63,24 @@ void Client::start_heartbeat() {
     heartbeat_timer.async_wait([this](const boost::system::error_code &ec) {
         if (!ec && connected) {
             send_ping();
-            start_heartbeat(); // повторяем
+            start_heartbeat();
         }
     });
 }
 
 void Client::send_ping() {
-    AuthPacket ping(AuthOpcodes::CMSG_PING);
     uint32_t ping_id = GeneratorUtils::random_uint32();
-    ping.write_uint32_le(ping_id);
-    send_packet(ping);
+
+    if (get_session_mode() == SessionMode::AUTH_SESSION) {
+        AuthPacket ping(AuthOpcodes::CMSG_PING);
+        ping.write_uint32_le(ping_id);
+        send_packet(ping);
+    } else {
+        WorkPacket ping(WorkOpcodes::CMSG_PING);
+        ping.write_uint32_le(ping_id);
+        send_packet(ping);
+    }
+
     Logger::get()->debug("[Client] Sent CMSG_PING");
 }
 
@@ -84,8 +92,14 @@ void Client::handle_logon_challenge() {
 }
 
 void Client::send_packet(const AuthPacket &packet) {
-    std::vector<uint8_t> full_packet = packet.build_packet();
+    send_packet_impl(packet.build_packet());
+}
 
+void Client::send_packet(const WorkPacket &packet) {
+    send_packet_impl(packet.build_packet());
+}
+
+void Client::send_packet_impl(const std::vector<uint8_t> &full_packet) {
     if (!connected) {
         Logger::get()->info("[Client] Not connected. Queuing packet.");
         outgoing_queue.push(full_packet);
@@ -118,90 +132,118 @@ void Client::flush_queue() {
 }
 
 void Client::start_receive_loop() {
-    // Читаем заголовок: [Opcode(2 BE)] [Length(2 BE)]
-    auto header = std::make_shared<std::vector<uint8_t>>(4);
+    auto log = Logger::get();
 
-    boost::asio::async_read(
-            socket, boost::asio::buffer(*header),
-            [this, header](boost::system::error_code ec, std::size_t) {
-                auto log = Logger::get();
+    if (get_session_mode() == SessionMode::AUTH_SESSION) {
+        auto header = std::make_shared<std::vector<uint8_t>>(3);
 
-                if (ec) {
-                    if (ec == boost::asio::error::operation_aborted || ec == boost::asio::error::eof) {
-                        log->info("[Client] Disconnected while reading header");
-                    } else {
-                        log->error("[Client] Header read failed: {}", ec.message());
-                    }
-                    connected = false;
-                    schedule_reconnect();
-                    return;
-                }
+        boost::asio::async_read(socket, boost::asio::buffer(*header),
+                                [this, header](boost::system::error_code ec, std::size_t) {
+                                    auto log = Logger::get();
+                                    if (ec) {
+                                        if (ec == boost::asio::error::operation_aborted ||
+                                            ec == boost::asio::error::eof) {
+                                            log->info("[Client] Disconnected while reading auth header");
+                                        } else {
+                                            log->error("[Client] Auth header read failed: {}", ec.message());
+                                        }
+                                        connected = false;
+                                        schedule_reconnect();
+                                        return;
+                                    }
 
-                // Распаковка заголовка
-                uint16_t opcode = (static_cast<uint16_t>((*header)[0]) << 8) | (*header)[1];
-                uint16_t length = (static_cast<uint16_t>((*header)[2]) << 8) | (*header)[3];
+                                    uint16_t length = (static_cast<uint16_t>((*header)[1]) << 8) | (*header)[2];
+                                    if (length > 2048) {
+                                        log->error("[Client] Auth payload too large: {}", length);
+                                        connected = false;
+                                        schedule_reconnect();
+                                        return;
+                                    }
 
-                if (length > 2048) {
-                    log->error("[Client] Payload too large: {}", length);
-                    connected = false;
-                    schedule_reconnect();
-                    return;
-                }
+                                    if (length == 0) {
+                                        process_empty<AuthPacket>(header);
+                                    } else {
+                                        read_payload<AuthPacket>(header, length);
+                                    }
+                                });
 
-                if (length == 0) {
-                    // Пустой payload
-                    std::vector<uint8_t> raw_packet;
-                    raw_packet.reserve(4);
-                    raw_packet.insert(raw_packet.end(), header->begin(), header->end());
+    } else {
+        auto header = std::make_shared<std::vector<uint8_t>>(4);
 
-                    try {
-                        AuthPacket packet;
-                        packet.deserialize(raw_packet);
-                        handle_packet(packet);
-                    } catch (const std::exception &ex) {
-                        log->error("[Client] Failed to parse empty AuthPacket: {}", ex.what());
-                    }
+        boost::asio::async_read(socket, boost::asio::buffer(*header),
+                                [this, header](boost::system::error_code ec, std::size_t) {
+                                    auto log = Logger::get();
+                                    if (ec) {
+                                        log->error("[Client] Work header read failed: {}", ec.message());
+                                        connected = false;
+                                        schedule_reconnect();
+                                        return;
+                                    }
 
-                    start_receive_loop();
-                    return;
-                }
+                                    uint16_t length = (static_cast<uint16_t>((*header)[2]) << 8) | (*header)[3];
+                                    if (length > 2048) {
+                                        log->error("[Client] Work payload too large: {}", length);
+                                        connected = false;
+                                        schedule_reconnect();
+                                        return;
+                                    }
 
-                // Иначе читаем payload
-                auto payload = std::make_shared<std::vector<uint8_t>>(length);
+                                    if (length == 0) {
+                                        process_empty<WorkPacket>(header);
+                                    } else {
+                                        read_payload<WorkPacket>(header, length);
+                                    }
+                                });
+    }
+}
 
-                boost::asio::async_read(
-                        socket, boost::asio::buffer(*payload),
-                        [this, payload, header](boost::system::error_code ec2, std::size_t) {
-                            auto log = Logger::get();
+template<typename PacketT>
+void Client::read_payload(std::shared_ptr<std::vector<uint8_t>> header, uint16_t length) {
+    auto payload = std::make_shared<std::vector<uint8_t>>(length);
 
-                            if (ec2) {
-                                if (ec2 == boost::asio::error::operation_aborted || ec2 == boost::asio::error::eof) {
-                                    log->info("[Client] Disconnected while reading payload");
-                                } else {
-                                    log->error("[Client] Payload read failed: {}", ec2.message());
+    boost::asio::async_read(socket, boost::asio::buffer(*payload),
+                            [this, header, payload](boost::system::error_code ec, std::size_t) {
+                                auto log = Logger::get();
+                                if (ec) {
+                                    if (ec == boost::asio::error::operation_aborted || ec == boost::asio::error::eof) {
+                                        log->info("[Client] Disconnected while reading payload");
+                                    } else {
+                                        log->error("[Client] Payload read failed: {}", ec.message());
+                                    }
+                                    connected = false;
+                                    schedule_reconnect();
+                                    return;
                                 }
-                                connected = false;
-                                schedule_reconnect();
-                                return;
-                            }
 
-                            // Формируем полный пакет: [Opcode(2)][Length(2)][Payload]
-                            std::vector<uint8_t> raw_packet;
-                            raw_packet.reserve(4 + payload->size());
-                            raw_packet.insert(raw_packet.end(), header->begin(), header->end());
-                            raw_packet.insert(raw_packet.end(), payload->begin(), payload->end());
+                                std::vector<uint8_t> raw_packet;
+                                raw_packet.reserve(header->size() + payload->size());
+                                raw_packet.insert(raw_packet.end(), header->begin(), header->end());
+                                raw_packet.insert(raw_packet.end(), payload->begin(), payload->end());
 
-                            try {
-                                AuthPacket packet;
-                                packet.deserialize(raw_packet);
-                                handle_packet(packet);
-                            } catch (const std::exception &ex) {
-                                log->error("[Client] Failed to parse AuthPacket: {}", ex.what());
-                            }
+                                try {
+                                    PacketT packet;
+                                    packet.deserialize(raw_packet);
+                                    handle_packet(packet);
+                                } catch (const std::exception &ex) {
+                                    log->error("[Client] Failed to parse packet: {}", ex.what());
+                                }
 
-                            start_receive_loop();
-                        });
-            });
+                                start_receive_loop();
+                            });
+}
+
+template<typename PacketT>
+void Client::process_empty(std::shared_ptr<std::vector<uint8_t>> header) {
+    auto log = Logger::get();
+    std::vector<uint8_t> raw_packet(header->begin(), header->end());
+    try {
+        PacketT packet;
+        packet.deserialize(raw_packet);
+        handle_packet(packet);
+    } catch (const std::exception &ex) {
+        log->error("[Client] Failed to parse empty packet: {}", ex.what());
+    }
+    start_receive_loop();
 }
 
 void Client::handle_packet(AuthPacket &p) {
@@ -213,13 +255,39 @@ void Client::handle_packet(AuthPacket &p) {
             break;
 
         case AuthOpcodes::SMSG_AUTH_LOGON_CHALLENGE: {
-            uint32_t someuint32 = p.read_uint32_le();
-            log->debug("[Client] Received SMSG_AUTH_LOGON_CHALLENGE with uint32_t={}", someuint32);
+            log->debug("[Client] Received SMSG_AUTH_LOGON_CHALLENGE, uint32={}", p.read_uint32_le());
+
+            AuthPacket packet(AuthOpcodes::CMSG_AUTH_LOGON_PROOF);
+            send_packet(packet);
+            Logger::get()->debug("[Client] Sent CMSG_AUTH_LOGON_PROOF");
             break;
         }
 
+        case AuthOpcodes::SMSG_AUTH_LOGON_PROOF:
+            log->debug("[Client] Received SMSG_AUTH_LOGON_PROOF, switching to WORK_SESSION");
+            set_session_mode(SessionMode::WORK_SESSION);
+            break;
+
         default:
-            log->warn("[Client] Unknown opcode: {}", static_cast<uint16_t>(p.get_opcode()));
+            log->warn("[Client] Unknown AuthOpcode: {}", static_cast<uint8_t>(p.get_opcode()));
+            break;
+    }
+}
+
+void Client::handle_packet(WorkPacket &p) {
+    auto log = Logger::get();
+
+    switch (p.get_opcode()) {
+        case WorkOpcodes::SMSG_PONG:
+            log->debug("[Client] Received SMSG_PONG");
+            break;
+
+        case WorkOpcodes::SMSG_MESSAGE:
+            log->debug("[Client] Received SMSG_MESSAGE: {}", p.read_string_nt_le());
+            break;
+
+        default:
+            log->warn("[Client] Unknown WorkOpcode: {}", static_cast<uint16_t>(p.get_opcode()));
             break;
     }
 }

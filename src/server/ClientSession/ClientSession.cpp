@@ -1,6 +1,7 @@
 #include "ClientSession.hpp"
 #include "Logger.hpp"
 #include "src/server/SessionMode/authstage/reader/ReaderAuthSession.hpp"
+#include "src/server/SessionMode/workstage/reader/ReaderWorkSession.hpp"
 #include <iostream>
 
 using boost::asio::ip::tcp;
@@ -87,7 +88,7 @@ void ClientSession::process_read_buffer() {
             ReaderAuthSession::process_read_buffer_as_authserver(shared_from_this());
             break;
         case SessionMode::WORK_SESSION:
-            //ReaderW3GS::process_read_buffer_as_w3gs(shared_from_this());
+            ReaderWorkSession::process_read_buffer_as_workserver(shared_from_this());
             break;
         default:
             Logger::get()->error("[client_session][process_read_buffer] Unknown session mode!");

@@ -24,7 +24,7 @@ int main() {
     timer1.expires_after(std::chrono::milliseconds(1000));
     timer1.async_wait([&client](const boost::system::error_code &ec) {
         if (!ec) {
-            Logger::get()->info("sending request on lookup account");
+            Logger::get()->info("start auth account");
             client->handle_logon_challenge();
         }
     });

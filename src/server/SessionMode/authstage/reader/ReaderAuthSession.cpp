@@ -8,19 +8,19 @@ void ReaderAuthSession::process_read_buffer_as_authserver(std::shared_ptr<Client
     auto log = Logger::get();
     MessageBuffer &buffer = session->read_buffer();
 
-    // Нужно минимум 4 байта заголовка (opcode(2) + length(2))
-    if (buffer.get_active_size() < 4)
+    // Нужно минимум 3 байта заголовка ([opcode(1)] + [length(2)])
+    if (buffer.get_active_size() < 3)
         return;
 
     const uint8_t *data = buffer.read_ptr();
 
-    // Читаем opcode (Big Endian)
-    uint16_t opcode = static_cast<uint16_t>(data[0]) << 8 | static_cast<uint16_t>(data[1]);
+    // Читаем opcode (1 байт)
+    uint8_t opcode = data[0];
     // Читаем length (Big Endian)
-    uint16_t size = static_cast<uint16_t>(data[2]) << 8 | static_cast<uint16_t>(data[3]);
+    uint16_t size = static_cast<uint16_t>(data[1]) << 8 | static_cast<uint16_t>(data[2]);
 
     // Проверяем, что весь пакет полностью в буфере
-    if (buffer.get_active_size() < 4 + size)
+    if (buffer.get_active_size() < 3 + size)
         return;
 
     // Ограничение размера payload
@@ -31,10 +31,10 @@ void ReaderAuthSession::process_read_buffer_as_authserver(std::shared_ptr<Client
     }
 
     // Копируем весь пакет [opcode][length][payload]
-    std::vector<uint8_t> full_packet(data, data + 4 + size);
+    std::vector<uint8_t> full_packet(data, data + 3 + size);
 
     // Сдвигаем read_ptr
-    buffer.read_completed(4 + size);
+    buffer.read_completed(3 + size);
 
     AuthPacket packet;
 
@@ -43,7 +43,8 @@ void ReaderAuthSession::process_read_buffer_as_authserver(std::shared_ptr<Client
         packet.deserialize(full_packet);
 
         // Лог (по желанию)
-        Packet::log_raw_payload(fmt::format("{:04X}", static_cast<uint16_t>(packet.get_opcode())), full_packet);
+        Packet::log_raw_payload(fmt::format("{:02X}", static_cast<uint8_t>(packet.get_opcode())), full_packet,
+                                "AuthPacket DUMP");
 
         // Обработка
         HandlersAuth::dispatch(session, packet);

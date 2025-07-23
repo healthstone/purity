@@ -34,16 +34,16 @@ public:
 
     std::shared_ptr<Server> server() const { return server_; }
 
-    // Режим: BNCS или W3ROUTE
+    // Режим: AUTH или WORK
     void set_session_mode(SessionMode mode) { session_mode_ = mode; }
 
     SessionMode get_session_mode() const { return session_mode_; }
 
-    MessageBuffer& read_buffer() {
+    MessageBuffer &read_buffer() {
         return read_buffer_;
     }
 
-    AuthSession* getAuthSession() { return authSession_.get(); }
+    AuthSession *getAuthSession() { return authSession_.get(); }
 
 private:
     void do_read();
