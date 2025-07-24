@@ -92,7 +92,7 @@ Table **accounts** with example account: login: **1**, pass: **1**
 
 ```
 CREATE TABLE accounts (
-  id SERIAL PRIMARY KEY,
+  id BIGSERIAL PRIMARY KEY,
   username VARCHAR(50) UNIQUE NOT NULL,
   salt BYTEA NOT NULL CHECK (octet_length(salt) = 32),
   verifier BYTEA NOT NULL CHECK (octet_length(verifier) = 32),

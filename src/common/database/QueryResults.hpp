@@ -30,7 +30,9 @@ template<>
 struct PgRowMapper<AccountsRow> {
     static AccountsRow map(const pqxx::row &r) {
         AccountsRow row;
-        row.id = r["id"].as<uint64_t>();
+
+        // PostgreSQL BIGINT -> int64_t -> uint64_t ( 0 … 9223372036854775807 )
+        row.id = static_cast<uint64_t>(r["id"].as<int64_t>());
 
         if (!r["username"].is_null())
             row.name = r["username"].as<std::string>();
@@ -65,6 +67,6 @@ struct PgRowMapper<NothingRow> {
 template<>
 struct PgRowMapper<uint64_t> {
     static uint64_t map(const pqxx::row &r) {
-        return r[0].as<uint64_t>();
+        return static_cast<uint64_t>(r[0].as<int64_t>());
     }
 };
