@@ -43,8 +43,7 @@ void ReaderAuthSession::process_read_buffer_as_authserver(std::shared_ptr<Client
         packet.deserialize(full_packet);
 
         // Лог (по желанию)
-        Packet::log_raw_payload(fmt::format("{:02X}", static_cast<uint8_t>(packet.get_opcode())), full_packet,
-                                "AuthPacket DUMP");
+        //Packet::log_raw_payload(fmt::format("{:02X}", static_cast<uint8_t>(packet.get_opcode())), full_packet, "APacket DUMP");
 
         // Обработка
         HandlersAuth::dispatch(session, packet);

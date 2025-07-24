@@ -8,8 +8,6 @@ using namespace HandlersWork;
 
 void HandlersWork::dispatch(std::shared_ptr<ClientSession> session, WorkPacket &p) {
     WorkOpcodes opcode = p.get_opcode();
-    auto log = Logger::get();
-
     switch (opcode) {
         case WorkOpcodes::CMSG_PING:
             handle_ping(std::move(session), p);
@@ -39,6 +37,5 @@ void HandlersWork::handle_ping(std::shared_ptr<ClientSession> session, WorkPacke
 }
 
 void HandlersWork::handle_message(std::shared_ptr<ClientSession> session, WorkPacket &p) {
-    auto log = Logger::get();
-    log->info("[HandlersWork] CMSG_MESSAGE");
+    Logger::get()->info("[HandlersWork] CMSG_MESSAGE");
 }

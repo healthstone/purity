@@ -9,8 +9,6 @@ using namespace HandlersAuth;
 
 void HandlersAuth::dispatch(std::shared_ptr<ClientSession> session, AuthPacket &p) {
     AuthOpcodes opcode = p.get_opcode();
-    auto log = Logger::get();
-
     switch (opcode) {
         case AuthOpcodes::CMSG_PING:
             handle_ping(std::move(session), p);
@@ -49,9 +47,8 @@ void HandlersAuth::handle_ping(std::shared_ptr<ClientSession> session, AuthPacke
 
 boost::asio::awaitable<void>
 HandlersAuth::handle_logon_challenge(std::shared_ptr<ClientSession> session, AuthPacket &p) {
-    auto log = Logger::get();
     std::string username = p.read_string_nt_le();
-    log->info("[HandlersAuth] CMSG_AUTH_LOGON_CHALLENGE with user {}", username);
+    Logger::get()->debug("[HandlersAuth] CMSG_AUTH_LOGON_CHALLENGE with user {}", username);
 
     AuthPacket reply(AuthOpcodes::SMSG_AUTH_LOGON_CHALLENGE);
     uint32_t randomUint32 = GeneratorUtils::random_uint32();
@@ -61,8 +58,7 @@ HandlersAuth::handle_logon_challenge(std::shared_ptr<ClientSession> session, Aut
 }
 
 void HandlersAuth::handle_logon_proof(std::shared_ptr<ClientSession> session, AuthPacket &p) {
-    auto log = Logger::get();
-    log->info("[HandlersAuth] CMSG_AUTH_LOGON_PROOF");
+    Logger::get()->debug("[HandlersAuth] CMSG_AUTH_LOGON_PROOF");
 
     session->set_session_mode(SessionMode::WORK_SESSION);
 

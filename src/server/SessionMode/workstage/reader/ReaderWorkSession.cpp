@@ -43,8 +43,7 @@ void ReaderWorkSession::process_read_buffer_as_workserver(std::shared_ptr<Client
         packet.deserialize(full_packet);
 
         // Лог (по желанию)
-        Packet::log_raw_payload(fmt::format("{:04X}", static_cast<uint16_t>(packet.get_opcode())), full_packet,
-                                "WorkPacket DUMP");
+        //Packet::log_raw_payload(fmt::format("{:04X}", static_cast<uint16_t>(packet.get_opcode())), full_packet, "WPacket DUMP");
 
         // Обработка
         HandlersWork::dispatch(session, packet);
