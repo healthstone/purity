@@ -50,7 +50,7 @@ The server supports **multi-stage session modes** to switch between authenticati
 - Supports fake challenges to mitigate timing attacks.
 - Uses OpenSSL BIGNUMs with proper lifetime management.
 
-## Technical Highlights
+### Technical Highlights
 
 - **All packets are big-endian.**
 - Safe async write queue for each client.
@@ -58,21 +58,21 @@ The server supports **multi-stage session modes** to switch between authenticati
 - `SRP` is prepared for PvPGN-like proof-of-concept authentication.
 - All socket writes are guarded against race conditions.
 
-## Security & Stability
+### Security & Stability
 
 - All OpenSSL BIGNUMs are freed properly.
 - DB pool handles broken connections.
 - Sessions auto-cleanup on error or disconnect.
 - No leaks in the async read/write chain.
 
-## How to Extend
+### How to Extend
 
 - Add new **opcodes** in `HandlersAuth` or `HandlersWork`.
 - Add new SQL prepared statements in your DB class.
 - Extend `SRP` for real password verification.
 - Add new session modes if needed (copy `AUTH_SESSION` structure).
 
-## 📦 Configuration via Environment Variables
+### 📦 Configuration via Environment Variables
 
 The server automatically reads database connection settings from **environment variables**, with safe defaults if not set:
 
@@ -83,6 +83,35 @@ std::string db_user = std::getenv("DB_USER") ? std::getenv("DB_USER") : "postgre
 std::string db_password = std::getenv("DB_PASSWORD") ? std::getenv("DB_PASSWORD") : "postgres";
 std::string db_name = std::getenv("DB_NAME") ? std::getenv("DB_NAME") : "postgres";
 ```
+
+---
+
+### Database example:
+
+Table **accounts** with example account: login: **1**, pass: **1**
+
+```
+CREATE TABLE accounts (
+  id SERIAL PRIMARY KEY,
+  username VARCHAR(50) UNIQUE NOT NULL,
+  salt BYTEA NOT NULL CHECK (octet_length(salt) = 32),
+  verifier BYTEA NOT NULL CHECK (octet_length(verifier) = 32),
+  email VARCHAR(100),
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+INSERT INTO accounts (id, username, salt, verifier, email, created_at) VALUES
+(
+  1,
+  '1',
+  decode('0A3E57EEA85D222817B72F5A6299B642D56DB174F522FF0F8C72172D1223AE63', 'hex'),
+  decode('D08A4D3949264CFA1536E41EE8E0FCA3000D07B8BF3DCC1D524AA10535723689', 'hex'),
+  'test@gmail.com',
+  '2025-05-01 23:11:58'
+);
+```
+
+---
 
 ### ⚙️ Variables:
 - **DB_URL** — PostgreSQL host address (default `127.0.0.1`)
@@ -106,7 +135,7 @@ This makes it easy to configure the server without changing the source code! ✅
 
 ---
 
-## Requirements
+### Requirements
 
 ```
 sudo apt install \
@@ -118,7 +147,7 @@ pkg-config \
 catch2
 ```
 
-## ⚡️Compilation
+### ⚡️Compilation
 
 mkdir build && cd build
 
