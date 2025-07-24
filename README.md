@@ -52,7 +52,7 @@ The server supports **multi-stage session modes** to switch between authenticati
 
 ### Technical Highlights
 
-- **All packets are big-endian.**
+- **All packet headers (opcode and length fields) are big-endian.**
 - Safe async write queue for each client.
 - `Handlers` run CPU-bound DB calls in dedicated threads but serialize back replies to the main I/O thread.
 - `SRP` is prepared for PvPGN-like proof-of-concept authentication.
