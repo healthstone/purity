@@ -25,7 +25,7 @@ int main() {
     timer1.async_wait([&client](const boost::system::error_code &ec) {
         if (!ec) {
             Logger::get()->info("start auth account");
-            client->handle_logon_challenge();
+            client->handle_logon_challenge("1", "1");
         }
     });
 

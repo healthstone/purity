@@ -16,7 +16,7 @@ public:
     void connect();
     void disconnect();
 
-    void handle_logon_challenge();
+    void handle_logon_challenge(const std::string &username, const std::string &password);
 
     void set_session_mode(SessionMode mode) { session_mode_ = mode; }
     SessionMode get_session_mode() const { return session_mode_; }
@@ -55,4 +55,5 @@ private:
     std::queue<std::vector<uint8_t>> outgoing_queue;
 
     SessionMode session_mode_ = SessionMode::AUTH_SESSION;
+    std::shared_ptr<SRP6> srp_ = std::make_shared<SRP6>();
 };

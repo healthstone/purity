@@ -1,6 +1,7 @@
 #include "Client.hpp"
 #include "Logger.hpp"
 #include "utils/generators/GeneratorUtils.hpp"
+#include "utils/HexUtils.hpp"
 #include <utility>
 
 using boost::asio::ip::tcp;
@@ -84,11 +85,13 @@ void Client::send_ping() {
     Logger::get()->debug("[Client] Sent CMSG_PING");
 }
 
-void Client::handle_logon_challenge() {
+void Client::handle_logon_challenge(const std::string &username, const std::string &password) {
+    srp_->set_credentials(username, password);
+
     AuthPacket packet(AuthOpcodes::CMSG_AUTH_LOGON_CHALLENGE);
-    packet.write_string_nt_le("Test_user");
+    packet.write_string_nt_le(username);
     send_packet(packet);
-    Logger::get()->debug("[Client] Sent CMSG_AUTH_LOGON_CHALLENGE");
+    Logger::get()->debug("[Client] Sent CMSG_AUTH_LOGON_CHALLENGE for user: {}", username);
 }
 
 void Client::send_packet(const AuthPacket &packet) {
@@ -251,22 +254,71 @@ void Client::handle_packet(AuthPacket &p) {
 
     switch (p.get_opcode()) {
         case AuthOpcodes::SMSG_PONG:
-            log->debug("[Client] Received SMSG_PONG");
+            log->debug("[AuthPacket] Received SMSG_PONG");
             break;
 
         case AuthOpcodes::SMSG_AUTH_LOGON_CHALLENGE: {
-            log->debug("[Client] Received SMSG_AUTH_LOGON_CHALLENGE, uint32={}", p.read_uint32_le());
+            try {
+                // 1) Считываем B (32 байта)
+                std::vector<uint8_t> B = p.read_bytes(32);
+                // 2) Считываем g (1 байт)
+                uint8_t g = p.read_uint8();
+                // 3) Считываем N (32 байта)
+                std::vector<uint8_t> N = p.read_bytes(32);
+                // 4) Считываем salt (32 байта)
+                std::vector<uint8_t> salt = p.read_bytes(32);
 
-            AuthPacket packet(AuthOpcodes::CMSG_AUTH_LOGON_PROOF);
-            send_packet(packet);
-            Logger::get()->debug("[Client] Sent CMSG_AUTH_LOGON_PROOF");
+                log->debug("[AuthPacket] SMSG_AUTH_LOGON_CHALLENGE: received"
+                           " B.size={} g={} N.size={} salt.size={}",
+                           B.size(), g, N.size(), salt.size());
+
+                // 5) Инициализируем SRP клиент
+                srp_->load_constants(N, g);
+                srp_->load_salt(salt);
+                srp_->generate_client_ephemeral();
+
+                // 6) Вычисляем A и M1
+                auto raw_A = srp_->get_A_bytes();
+                auto padded_A = HexUtils::pad_bytes_left(raw_A, 32);
+                auto raw_M1 = srp_->compute_M1(B);
+                auto padded_M1 = HexUtils::pad_bytes_left(raw_M1, 20);
+
+                // 7) Формируем и отправляем CMSG_AUTH_LOGON_PROOF
+                AuthPacket proof(AuthOpcodes::CMSG_AUTH_LOGON_PROOF);
+                proof.write_bytes(padded_A);   // 32 байта A
+                proof.write_bytes(padded_M1);  // 20 байт SHA1(M1)
+                send_packet(proof);
+                log->debug("[AuthPacket] SMSG_AUTH_LOGON_CHALLENGE: sent CMSG_AUTH_LOGON_PROOF: A={} M1={}",
+                           padded_A.size(), padded_M1.size());
+            }
+            catch (const std::exception& ex) {
+                log->error("[handler] SMSG_AUTH_LOGON_CHALLENGE failed: {}", ex.what());
+                disconnect();
+            }
             break;
         }
 
-        case AuthOpcodes::SMSG_AUTH_LOGON_PROOF:
-            log->debug("[Client] Received SMSG_AUTH_LOGON_PROOF, switching to WORK_SESSION");
+        case AuthOpcodes::SMSG_AUTH_LOGON_PROOF: {
+            std::vector<uint8_t> M2_server = p.read_bytes(20);
+            if (!srp_->verify_server_proof(srp_->get_last_M1(), M2_server)) {
+                log->error("[Client] SMSG_AUTH_LOGON_PROOF: SRP Server proof M2 invalid — disconnect");
+                disconnect();
+                break;
+            }
+
             set_session_mode(SessionMode::WORK_SESSION);
+            log->debug("[Client] SMSG_AUTH_LOGON_PROOF: SRP Server proof M2 verified — authentication successful");
+            // Продолжаем работу — сессия аутентифицирована
             break;
+        }
+
+        case AuthOpcodes::SMSG_AUTH_RESPONSE: {
+            uint8_t authcode = p.read_uint8();
+            uint8_t errorcode = p.read_uint8();
+            log->debug("[Client] SMSG_AUTH_RESPONSE: authcode={} errorcode={}", authcode, errorcode);
+            disconnect();
+            break;
+        }
 
         default:
             log->warn("[Client] Unknown AuthOpcode: {}", static_cast<uint8_t>(p.get_opcode()));
