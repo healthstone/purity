@@ -121,7 +121,7 @@ HandlersAuth::handle_logon_challenge(std::shared_ptr<ClientSession> session, Aut
         reply.write_bytes(srp->get_N_bytes());          // 32 байта N (большое простое число)
         reply.write_bytes(*user->salt);                 // 32 байта salt
         PacketUtils::send_packet_as<AuthPacket>(std::move(session), reply);
-        log->debug("[HandlersAuth] CMSG_AUTH_LOGON_CHALLENGE: sizes B={}, g={}, N={}, salt={}", srp->get_B_bytes().size(), srp->get_generator(), srp->get_N_bytes().size(), user->salt->size());
+        log->debug("[HandlersAuth] CMSG_AUTH_LOGON_CHALLENGE: B.size={}, g={}, N.size={}, salt.size={}", srp->get_B_bytes().size(), srp->get_generator(), srp->get_N_bytes().size(), user->salt->size());
         co_return;
     }
     catch (const std::exception &ex) {
