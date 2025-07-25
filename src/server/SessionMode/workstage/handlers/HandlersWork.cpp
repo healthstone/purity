@@ -37,5 +37,6 @@ void HandlersWork::handle_ping(std::shared_ptr<ClientSession> session, WorkPacke
 }
 
 void HandlersWork::handle_message(std::shared_ptr<ClientSession> session, WorkPacket &p) {
-    Logger::get()->info("[HandlersWork] CMSG_MESSAGE");
+    std::string msg = p.read_string_nt_le();
+    Logger::get()->info("[HandlersWork] CMSG_MESSAGE: {}", msg);
 }

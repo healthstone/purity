@@ -85,6 +85,14 @@ void Client::send_ping() {
     Logger::get()->trace("[Client] Sent CMSG_PING");
 }
 
+void Client::send_message(const std::string &msg) {
+    if (get_session_mode() == SessionMode::AUTH_SESSION)
+        return;
+    WorkPacket packet(WorkOpcodes::CMSG_MESSAGE);
+    packet.write_string_nt_le(msg);
+    send_packet(packet);
+}
+
 void Client::handle_logon_challenge(const std::string &username, const std::string &password) {
     srp_->set_credentials(username, password);
 

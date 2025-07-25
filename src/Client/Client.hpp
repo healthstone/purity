@@ -16,6 +16,7 @@ public:
     void connect();
     void disconnect();
 
+    void send_message(const std::string &msg);
     void handle_logon_challenge(const std::string &username, const std::string &password);
 
     void set_session_mode(SessionMode mode) { session_mode_ = mode; }

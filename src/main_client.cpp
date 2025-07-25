@@ -12,12 +12,12 @@ int main() {
 
     // Отправка сообщений из cin на сервер в виде опкода MESSAGE
     // если не нужно, просто закомментить
-//    std::thread([client]() {
-//        std::string line;
-//        while (std::getline(std::cin, line)) {
-//            client->send_message(line);
-//        }
-//    }).detach();
+    std::thread([client]() {
+        std::string line;
+        while (std::getline(std::cin, line)) {
+            client->send_message(line);
+        }
+    }).detach();
 
     // Первый таймер — отправка первого пакета через 1000мс
     boost::asio::steady_timer timer1(io);
