@@ -79,14 +79,42 @@ HandlersAuth::handle_logon_challenge(std::shared_ptr<ClientSession> session, Aut
     username = UTF8Utils::to_uppercase(username);
     session->getAccountInfo()->srp()->set_only_username(username);
 
-    // 3 - лезем в бд
+    auto cache = session->server()->account_cache();
+    auto cached_user_opt = cache->get(username);
+
+    auto auth = session->getAccountInfo();
+    auto srp = auth->srp();
+
+    // 3 - пробуем взять из кэша
+    if (cached_user_opt) {
+        auto &cached_user = *cached_user_opt;
+
+        srp->load_verifier(cached_user.salt, cached_user.verifier);
+        srp->generate_server_ephemeral();
+
+        log->debug(
+                "[HandlersAuth] CMSG_AUTH_LOGON_CHALLENGE CACHED ENTRY used for '{}': B.size={}, g={}, N.size={}, salt.size={}",
+                username, srp->get_B_bytes().size(), srp->get_generator(), srp->get_N_bytes().size(),
+                cached_user.salt.size());
+
+        AuthPacket reply(AuthOpcodes::SMSG_AUTH_LOGON_CHALLENGE);
+        reply.write_bytes(srp->get_B_bytes());
+        reply.write_uint8(srp->get_generator());
+        reply.write_bytes(srp->get_N_bytes());
+        reply.write_bytes(cached_user.salt);
+
+        PacketUtils::send_packet_as<AuthPacket>(std::move(session), reply);
+        co_return;
+    }
+
+    // 4 - лезем в бд
     try {
         PreparedStatement stmt("SELECT_ACCOUNT_BY_USERNAME");
         stmt.set_param(0, username);
 
         auto user = session->server()->db()->execute_sync<AccountsRow>(stmt);
 
-        // 4 - если нет аккаунта
+        // 5 - если нет аккаунта
         if (!user) {
             log->error("[HandlersAuth] User '{}' not found", username);
 
@@ -97,7 +125,7 @@ HandlersAuth::handle_logon_challenge(std::shared_ptr<ClientSession> session, Aut
             co_return;
         }
 
-        // 5 --- Проверка salt и verifier ---
+        // 6 --- Проверка salt и verifier ---
         if (!user->salt.has_value() || !user->verifier.has_value() ||
             user->salt->size() != 32 || user->verifier->size() != 32) {
             log->error("[HandlersAuth] User '{}' has invalid salt/verifier length", username);
@@ -109,10 +137,12 @@ HandlersAuth::handle_logon_challenge(std::shared_ptr<ClientSession> session, Aut
             co_return;
         }
 
-        // 6 --- Инициализация SRP ---
-        auto auth = session->getAccountInfo();
-        auto srp = auth->srp();
+        AccountCache::AccountCacheEntry cacheEntry;
+        cacheEntry.salt = *user->salt;
+        cacheEntry.verifier = *user->verifier;
+        cache->put(username, cacheEntry);
 
+        // 7 --- Инициализация SRP ---
         srp->load_verifier(*user->salt, *user->verifier);
         srp->generate_server_ephemeral();
 

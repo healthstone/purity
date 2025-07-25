@@ -8,7 +8,11 @@ Server::Server(boost::asio::io_context &io_context,
                std::shared_ptr<Database> db,
                int port)
         : io_context_(io_context), acceptor_(io_context, tcp::endpoint(tcp::v4(), port)),
-          db_(std::move(db)) {}
+          db_(std::move(db)),
+          account_cache_(std::make_shared<AccountCache>(io_context, std::chrono::minutes(5), std::chrono::minutes(1)))
+{
+    account_cache_->start(); // <-- Запускаем таймер только после make_shared
+}
 
 void Server::start_accept() {
     if (!acceptor_.is_open()) return;
@@ -41,6 +45,10 @@ void Server::start_accept() {
 
 void Server::stop() {
     auto log = Logger::get();
+
+    if (account_cache_) {
+        account_cache_->stop();
+    }
 
     boost::system::error_code ec;
     acceptor_.cancel(ec);
