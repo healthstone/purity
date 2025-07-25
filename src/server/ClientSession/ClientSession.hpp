@@ -9,7 +9,7 @@
 #include "src/server/Server.hpp"
 #include "packet/MessageBuffer.hpp"
 #include "packet/Packet.hpp"
-#include "src/server/SessionMode/authstage/entity/AuthSession.hpp"
+#include "src/server/SessionMode/authstage/entity/AccountInfo.hpp"
 
 class Server; // forward declaration
 
@@ -43,7 +43,7 @@ public:
         return read_buffer_;
     }
 
-    AuthSession *getAuthSession() { return authSession_.get(); }
+    AccountInfo *getAccountInfo() { return accountInfo_.get(); }
 
 private:
     void do_read();
@@ -56,7 +56,7 @@ private:
 
     boost::asio::ip::tcp::socket socket_;
     std::shared_ptr<Server> server_;
-    std::shared_ptr<AuthSession> authSession_;
+    std::shared_ptr<AccountInfo> accountInfo_ = std::make_shared<AccountInfo>();
 
     MessageBuffer read_buffer_;
 

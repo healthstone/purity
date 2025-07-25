@@ -26,12 +26,12 @@ void HandlersWork::dispatch(std::shared_ptr<ClientSession> session, WorkPacket &
 void HandlersWork::handle_ping(std::shared_ptr<ClientSession> session, WorkPacket &p) {
     // Считываем ping ID из клиента (4 байта LE)
     uint32_t ping = p.read_uint32_le();
-    Logger::get()->debug("[HandlersWork] CMSG_PING with ping: {}", ping);
 
     // Формируем PONG — возвращаем то же самое число
     WorkPacket reply(WorkOpcodes::SMSG_PONG);
     reply.write_uint32_le(ping);
 
+    Logger::get()->trace("[HandlersWork] CMSG_PING");
     // Отправляем обратно клиенту
     PacketUtils::send_packet_as<WorkPacket>(std::move(session), reply);
 }

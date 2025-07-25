@@ -11,6 +11,7 @@ public:
     SRP6();
     ~SRP6();
 
+    void set_only_username(const std::string& username);
     void load_verifier(const std::vector<uint8_t>& salt, const std::vector<uint8_t>& verifier);
     void generate_server_ephemeral();
 
@@ -24,6 +25,8 @@ public:
     void load_salt(const std::vector<uint8_t>& salt);
     void set_credentials(const std::string& username, const std::string& password);
     void generate_client_ephemeral();
+
+    std::string getUserName() const {return username_;}
 
     const std::vector<uint8_t>& get_last_M1() const;
     std::vector<uint8_t> get_A_bytes() const;

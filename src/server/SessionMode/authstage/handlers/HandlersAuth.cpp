@@ -36,13 +36,13 @@ void HandlersAuth::dispatch(std::shared_ptr<ClientSession> session, AuthPacket &
 void HandlersAuth::handle_ping(std::shared_ptr<ClientSession> session, AuthPacket &p) {
     // Считываем ping ID из клиента (4 байта LE)
     uint32_t ping = p.read_uint32_le();
-    Logger::get()->debug("[HandlersAuth] CMSG_PING with ping: {}", ping);
 
     // Формируем PONG — возвращаем то же самое число
     AuthPacket reply(AuthOpcodes::SMSG_PONG);
     reply.write_uint32_le(ping);
 
     // Отправляем обратно клиенту
+    Logger::get()->debug("[HandlersAuth] CMSG_PING");
     PacketUtils::send_packet_as<AuthPacket>(std::move(session), reply);
 }
 
@@ -77,6 +77,7 @@ HandlersAuth::handle_logon_challenge(std::shared_ptr<ClientSession> session, Aut
 
     // 2 - делаем нижний регистр
     username = UTF8Utils::to_lowercase(username);
+    session->getAccountInfo()->srp()->set_only_username(username);
 
     // 3 - лезем в бд
     try {
@@ -109,19 +110,20 @@ HandlersAuth::handle_logon_challenge(std::shared_ptr<ClientSession> session, Aut
         }
 
         // 6 --- Инициализация SRP ---
-        auto auth = session->getAuthSession();
+        auto auth = session->getAccountInfo();
         auto srp = auth->srp();
 
         srp->load_verifier(*user->salt, *user->verifier);
         srp->generate_server_ephemeral();
 
+        log->debug("[HandlersAuth] CMSG_AUTH_LOGON_CHALLENGE: B.size={}, g={}, N.size={}, salt.size={}",
+                   srp->get_B_bytes().size(), srp->get_generator(), srp->get_N_bytes().size(), user->salt->size());
         AuthPacket reply(AuthOpcodes::SMSG_AUTH_LOGON_CHALLENGE);
         reply.write_bytes(srp->get_B_bytes());          // 32 байта B (публичный ключ сервера)
         reply.write_uint8(srp->get_generator());        // 1 байт g
         reply.write_bytes(srp->get_N_bytes());          // 32 байта N (большое простое число)
         reply.write_bytes(*user->salt);                 // 32 байта salt
         PacketUtils::send_packet_as<AuthPacket>(std::move(session), reply);
-        log->debug("[HandlersAuth] CMSG_AUTH_LOGON_CHALLENGE: B.size={}, g={}, N.size={}, salt.size={}", srp->get_B_bytes().size(), srp->get_generator(), srp->get_N_bytes().size(), user->salt->size());
         co_return;
     }
     catch (const std::exception &ex) {
@@ -141,7 +143,7 @@ void HandlersAuth::handle_logon_proof(std::shared_ptr<ClientSession> session, Au
         std::vector<uint8_t> M1_client = p.read_bytes(20);
 
         std::vector<uint8_t> M2;
-        auto srp = session->getAuthSession()->srp();
+        auto srp = session->getAccountInfo()->srp();
 
         if (!srp->verify_client_proof(A_bytes, M1_client, M2)) {
             log->warn("[HandlersAuth] CMSG_AUTH_LOGON_PROOF: SRP6 M1 verification failed");
@@ -154,12 +156,13 @@ void HandlersAuth::handle_logon_proof(std::shared_ptr<ClientSession> session, Au
 
         log->debug("[HandlersAuth] CMSG_AUTH_LOGON_PROOF: SRP6 OK — Sent SMSG_AUTH_LOGON_PROOF");
         session->set_session_mode(SessionMode::WORK_SESSION);
+        session->getAccountInfo()->handle_auth_state();
 
         AuthPacket reply(AuthOpcodes::SMSG_AUTH_LOGON_PROOF);
         reply.write_bytes(M2);
         PacketUtils::send_packet_as<AuthPacket>(std::move(session), reply);
     }
-    catch (const std::exception& ex) {
+    catch (const std::exception &ex) {
         log->error("[HandlersAuth] CMSG_AUTH_LOGON_PROOF exception: {}", ex.what());
         AuthPacket fail(AuthOpcodes::SMSG_AUTH_RESPONSE);
         fail.write_uint8(static_cast<uint8_t>(AuthStatusCode::AUTH_FAILED));

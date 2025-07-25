@@ -56,6 +56,10 @@ BIGNUM* SRP6::calculate_k() const {
     return result;
 }
 
+void SRP6::set_only_username(const std::string& username) {
+    username_ = username;
+}
+
 void SRP6::load_verifier(const std::vector<uint8_t>& salt, const std::vector<uint8_t>& verifier) {
     salt_ = salt;
     BN_bin2bn(verifier.data(), verifier.size(), v_);

@@ -7,10 +7,7 @@
 using boost::asio::ip::tcp;
 
 ClientSession::ClientSession(tcp::socket socket, std::shared_ptr<Server> server)
-        : socket_(std::move(socket)), server_(std::move(server)), read_buffer_(4096) {
-    // создаем класс с bncs аккаунтом
-    authSession_ = std::make_shared<AuthSession>();
-}
+        : socket_(std::move(socket)), server_(std::move(server)), read_buffer_(4096) {}
 
 void ClientSession::start() {
     auto ep = socket_.remote_endpoint();
@@ -23,6 +20,9 @@ void ClientSession::start() {
 
 void ClientSession::close() {
     if (closed_.exchange(true)) return;
+
+    if (get_session_mode() == SessionMode::WORK_SESSION)
+        getAccountInfo()->handle_close_state();
 
     auto log = Logger::get();
 
