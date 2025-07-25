@@ -149,7 +149,10 @@ std::vector<uint8_t> SRP6::compute_M1(const std::vector<uint8_t>& B_bytes) {
     uint8_t hash[SHA_DIGEST_LENGTH];
     SHA1(to_hash.data(), to_hash.size(), hash);
 
-    last_M1_.assign(hash, hash + SHA_DIGEST_LENGTH);
+    std::vector<uint8_t> m1_raw;
+    m1_raw.assign(hash, hash + SHA_DIGEST_LENGTH);
+
+    last_M1_ = HexUtils::pad_bytes_left(m1_raw, 20);
     return last_M1_;
 }
 

@@ -1,7 +1,6 @@
 #include "Client.hpp"
 #include "Logger.hpp"
 #include "utils/generators/GeneratorUtils.hpp"
-#include "utils/HexUtils.hpp"
 #include <utility>
 
 using boost::asio::ip::tcp;
@@ -286,10 +285,8 @@ void Client::handle_packet(AuthPacket &p) {
                 srp_->generate_client_ephemeral();
 
                 // 6) Вычисляем A и M1
-                auto raw_A = srp_->get_A_bytes();
-                auto padded_A = HexUtils::pad_bytes_left(raw_A, 32);
-                auto raw_M1 = srp_->compute_M1(B);
-                auto padded_M1 = HexUtils::pad_bytes_left(raw_M1, 20);
+                auto padded_A = srp_->get_A_bytes();
+                auto padded_M1 = srp_->compute_M1(B);
 
                 // 7) Формируем и отправляем CMSG_AUTH_LOGON_PROOF
                 AuthPacket proof(AuthOpcodes::CMSG_AUTH_LOGON_PROOF);
