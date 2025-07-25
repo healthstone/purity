@@ -71,4 +71,27 @@ namespace UTF8Utils {
         return result;
     }
 
+    std::string to_uppercase(const std::string &str) {
+        std::string result;
+        result.reserve(str.size());
+
+        for (size_t i = 0; i < str.size();) {
+            unsigned char c = str[i];
+            if (c <= 0x7F) {
+                result.push_back(std::toupper(c));
+                ++i;
+            } else {
+                size_t length = 1;
+                if ((c & 0xE0) == 0xC0) length = 2;
+                else if ((c & 0xF0) == 0xE0) length = 3;
+                else if ((c & 0xF8) == 0xF0) length = 4;
+
+                result.append(str.substr(i, length));
+                i += length;
+            }
+        }
+
+        return result;
+    }
+
 } // namespace UTF8Utils

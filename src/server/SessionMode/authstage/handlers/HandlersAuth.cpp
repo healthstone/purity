@@ -75,8 +75,8 @@ HandlersAuth::handle_logon_challenge(std::shared_ptr<ClientSession> session, Aut
         co_return;
     }
 
-    // 2 - делаем нижний регистр
-    username = UTF8Utils::to_lowercase(username);
+    // 2 - делаем верхний регистр
+    username = UTF8Utils::to_uppercase(username);
     session->getAccountInfo()->srp()->set_only_username(username);
 
     // 3 - лезем в бд

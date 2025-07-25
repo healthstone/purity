@@ -56,6 +56,50 @@ BIGNUM* SRP6::calculate_k() const {
     return result;
 }
 
+//auto [salt, verifier] = srp.generate_salt_and_verifier_trinity("bob", "hunter2");
+std::pair<std::vector<uint8_t>, std::vector<uint8_t>>
+SRP6::generate_salt_and_verifier_trinity(const std::string& username, const std::string& password) {
+    // 1) Генерируем 32-байтную соль
+    uint8_t salt_bytes[32];
+    RAND_bytes(salt_bytes, sizeof(salt_bytes));
+    std::vector<uint8_t> salt_vec(salt_bytes, salt_bytes + sizeof(salt_bytes));
+
+    // 2) Считаем inner hash = SHA1(uppercase(username) : ":" : password)
+    std::string up = username;
+    for (char& c : up) {
+        c = std::toupper(static_cast<unsigned char>(c));
+    }
+    up += ":";
+    up += password;
+
+    uint8_t inner_hash[SHA_DIGEST_LENGTH];
+    SHA1(reinterpret_cast<const uint8_t*>(up.data()), up.size(), inner_hash);
+
+    // 3) Считаем x = SHA1(salt | inner_hash)
+    std::vector<uint8_t> to_hash;
+    to_hash.insert(to_hash.end(), salt_vec.begin(), salt_vec.end());
+    to_hash.insert(to_hash.end(), inner_hash, inner_hash + SHA_DIGEST_LENGTH);
+
+    uint8_t x_hash[SHA_DIGEST_LENGTH];
+    SHA1(to_hash.data(), to_hash.size(), x_hash);
+
+    BIGNUM* x = BN_bin2bn(x_hash, SHA_DIGEST_LENGTH, nullptr);
+
+    // 4) v = g^x mod N
+    BIGNUM* v = BN_new();
+    BN_mod_exp(v, g_, x, N_, bn_ctx_);
+
+    // 5) Вектор verifier
+    std::vector<uint8_t> verifier_vec(BN_num_bytes(v));
+    BN_bn2bin(v, verifier_vec.data());
+
+    BN_free(x);
+    BN_free(v);
+
+    return { salt_vec, verifier_vec };
+}
+
+
 void SRP6::set_only_username(const std::string& username) {
     username_ = username;
 }

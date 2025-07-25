@@ -11,6 +11,11 @@ public:
     SRP6();
     ~SRP6();
 
+    std::pair<std::vector<uint8_t>, std::vector<uint8_t>> generate_salt_and_verifier_trinity(
+            const std::string& username,
+            const std::string& password
+    );
+
     void set_only_username(const std::string& username);
     void load_verifier(const std::vector<uint8_t>& salt, const std::vector<uint8_t>& verifier);
     void generate_server_ephemeral();
